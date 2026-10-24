@@ -1,0 +1,28 @@
+{
+  "reading": {
+    "tax_year": "2025",
+    "employee_ssn": "900-12-3456",
+    "employer_ein": "98-7654321",
+    "employer_name": "Lakeside Garden Center LLC",
+    "employee_name": "Margaret A. Testwell",
+    "box1_wages": "6,200.00",
+    "box2_federal_withheld": "310.00",
+    "box3_ss_wages": "6,200.00",
+    "box4_ss_withheld": "384.40",
+    "box5_medicare_wages": "6,200.00",
+    "box6_medicare_withheld": "89.90",
+    "box12": [
+      {
+        "code": "D",
+        "amount": "500.00"
+      }
+    ],
+    "unreadable_boxes": []
+  },
+  "expected": {
+    "status": "extracted",
+    "box1": "6200.00",
+    "box2": "310.00",
+    "escalations": []
+  }
+}

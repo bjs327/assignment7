@@ -1,0 +1,23 @@
+{
+  "reading": {
+    "tax_year": "2024",
+    "employee_ssn": "901-55-1234",
+    "employer_ein": "44-5556667",
+    "employer_name": "Oak Street Hardware",
+    "employee_name": "Walter C. Example",
+    "box1_wages": "12,000.00",
+    "box2_federal_withheld": "900.00",
+    "box3_ss_wages": "12,000.00",
+    "box4_ss_withheld": "744.00",
+    "box5_medicare_wages": "12,000.00",
+    "box6_medicare_withheld": "174.00",
+    "box12": [],
+    "unreadable_boxes": []
+  },
+  "expected": {
+    "status": "needs_review",
+    "escalations": [
+      "wrong_tax_year"
+    ]
+  }
+}
