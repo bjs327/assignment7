@@ -1,0 +1,6 @@
+mcp==2.2.0
+pydantic>=2.11,<3
+
+# Testing
+pytest>=8
+hypothesis>=6.100
