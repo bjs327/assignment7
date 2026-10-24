@@ -1,5 +1,7 @@
 mcp==2.2.0
 pydantic>=2.11,<3
+langgraph>=1.0,<2
+langgraph-checkpoint-sqlite>=3.0,<4
 
 # Testing
 pytest>=8

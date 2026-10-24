@@ -3,3 +3,7 @@
 __pycache__/
 .pytest_cache/
 .hypothesis/
+
+# Saved intake sessions (taxpayer data)
+*.sqlite
+*.sqlite-*
