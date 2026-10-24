@@ -13,7 +13,7 @@ between documents and answers, and any request for advice goes to a human.
 |---|---|---|
 | Orchestrator | Verena | Placeholder |
 | Intake | Jordan | Placeholder |
-| Document Extraction | Yassine | Placeholder |
+| Document Extraction | Yassine | W-2 extraction agent done (LangGraph nodes, tests) |
 | Eligibility & Rules | David | Placeholder |
 | Computation | Brendan | `tax_math` MCP server done, agent node next |
 | Review / Audit | Marco | Placeholder |
@@ -27,7 +27,7 @@ between documents and answers, and any request for advice goes to a human.
 | Task division and management | TODO |
 | MLOps/DevOps | TODO |
 | Guardrails and ethics | TODO |
-| Security | TODO |
+| Security | Yassine |
 
 ## Setup
 
@@ -60,13 +60,22 @@ That starts the `tax_math` MCP server on stdin/stdout. Normally the Computation 
 rather than a person. Commands for the rest of the system will be added to `run.py` as the
 agents land.
 
+To try the Document Extraction agent on the fake W-2s:
+
+```bash
+python data/generate_fixtures.py                                  # fake W-2 images
+python run.py extract demo/w2_image_1.jpg demo/w2_image_2.jpg     # needs an API key in .env
+python run.py extract demo/w2_image_1.jpg --offline               # no key needed
+```
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-There are about 330 tests for `tax_math`, plus two skipped placeholders for tests other
+There are about 330 tests for `tax_math`, about 30 for Document Extraction and SSN security
+(no API key needed), plus two skipped placeholders for tests other
 components still need to write.
 
 ## Repository layout
@@ -81,16 +90,18 @@ components still need to write.
 │   ├── state.py                 placeholder: shared state and reducers
 │   ├── graph.py                 placeholder: LangGraph wiring
 │   ├── memory.py                placeholder: checkpointer and context-window strategy
-│   ├── agents/                  the six agents (placeholders)
+│   ├── agents/                  the six agents (extraction done, others placeholders)
+│   ├── security/                done: SSN validation, masking and redaction
 │   └── tax_math/                done: deterministic 2025 arithmetic and its MCP server
 ├── data/
-│   ├── generate_fixtures.py     placeholder
+│   ├── generate_fixtures.py     fake W-2 images with ground-truth JSON
 │   ├── policy.md                reference corpus: computation rules done, eligibility rules TODO
 │   └── fixtures/
 ├── evals/cases.json             placeholder
 ├── tests/
 │   ├── test_merge_order.py      placeholder
 │   ├── test_decision_table.py   placeholder
+│   ├── extraction/              tests for Document Extraction and SSN security
 │   └── tax_math/                tests for tax_math
 ├── traces/
 ├── docs/
@@ -102,7 +113,7 @@ components still need to write.
     └── eval_case_2.md           placeholder
 ```
 
-Still to add: `docs/graph.png`, the W-2 images and the demo video in `demo/`.
+Still to add: `docs/graph.png` and the demo video in `demo/`.
 
 ## Orchestration
 

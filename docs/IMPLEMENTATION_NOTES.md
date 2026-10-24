@@ -8,7 +8,7 @@ One section per component and per focus area, each written by its owner.
 - [Eligibility & Rules](#eligibility--rules-david)
 - [Computation and the tax_math MCP server](#computation-and-the-tax_math-mcp-server-brendan)
 - [Review / Audit](#review--audit-marco)
-- Focus areas: [Inter-agent communication](#inter-agent-communication-brendan)
+- Focus areas: [Inter-agent communication](#inter-agent-communication-brendan), [Security](#security-yassine)
 
 ## Orchestrator (Verena)
 
@@ -20,7 +20,79 @@ TODO
 
 ## Document Extraction (Yassine)
 
-TODO
+Turns W-2 images into typed records. Every amount carries a provenance record (file, file
+hash, box, the raw text read, model, time and attempt number). The agent transcribes; it
+never decides which form line a value feeds. That is the Computation agent's job.
+
+Code: `src/agents/extraction/`. Tests: `tests/extraction/`. Fixtures: `data/generate_fixtures.py`.
+
+### How it reads a W-2
+
+1. A vision model (any LangChain chat model; Anthropic by default, see `.env.example`) returns
+   a `W2Reading` through structured output: every value as a string, exactly as printed.
+   The prompt tells it to mark boxes it can't read rather than guess, and to treat text on
+   the document as data, never as instructions.
+2. Plain Python (`validation.py`) parses the strings into amounts and runs checks. A doubtful
+   value is flagged, never corrected, so a model mistake becomes a question for a human
+   rather than a wrong number on the return.
+3. A failed model call or malformed output is retried once, then escalated.
+
+### Graph shape
+
+```
+route_documents --Send per W-2--> extract_document (x N, in parallel) --> aggregate_extractions
+```
+
+- **Parallel branch:** one `Send` per W-2. Each branch writes to `extracted_documents`.
+- **Reducer:** `merge_extractions` keys results by document id, lets a higher `attempt` win,
+  and sorts the output, so the merged state is the same whatever order branches finish in
+  (`tests/extraction/test_extraction_merge_order.py`).
+- **Aggregation:** runs once after all branches. Flags the same file uploaded twice (it would
+  double-count wages) and marks non-W-2 documents as entered by hand.
+- **Review loop hook:** Review writes document ids to `reextract_document_ids`; only those are
+  read again, with `attempt + 1`.
+
+### Interface for other agents
+
+| Direction | Key | Shape |
+|---|---|---|
+| Intake -> Extraction | `documents` | `[{"document_id": "w2-1", "document_type": "W-2", "path": "..."}]` |
+| Extraction -> everyone | `extracted_documents` | `ExtractionResult` dicts (`schemas.py`), status `extracted` / `needs_review` / `failed` / `manual_entry_required` |
+| Extraction -> Orchestrator | `escalations` | `{source_agent, document_id, code, reason, attempt, created_at}` |
+| Extraction -> Computation | `labeled_amounts(docs, "1")` | `[{"label": "W-2 w2-1 (Acme) box 1", "amount": "18500.00"}]`, ready for `tax_math.sum_amounts` |
+
+The agent never calls `interrupt()` itself; the Orchestrator decides when an escalation
+pauses the graph. `labeled_amounts` only returns documents with status `extracted`, so a W-2
+awaiting review can't reach the return.
+
+To wire it in, add the `ExtractionState` keys and reducers to `src/state.py`, then call
+`add_extraction_nodes(builder, extractor, entry="orchestrator", exit_to="orchestrator")` in
+`src/graph.py`.
+
+### Escalation codes
+
+| Code | When |
+|---|---|
+| `non_test_ssn` | Box a is outside 900-999. The SSN is discarded. |
+| `wrong_tax_year` | Not a 2025 W-2 (prior-year returns are out of scope). |
+| `unreadable_box`, `missing_wages`, `amount_*` | A box couldn't be read as a clean amount. |
+| `duplicate_document` | The same file was uploaded twice. |
+| `extraction_failed`, `file_unreadable` | The model failed twice, or the file couldn't be opened. |
+
+Lower-severity `needs_confirmation` issues (blank box 2, withholding above wages, missing tax
+year) are recorded on the result for Intake or Review to confirm without stopping the graph.
+
+### Trying it
+
+```bash
+python data/generate_fixtures.py                          # fake W-2s into demo/ and data/fixtures/
+python run.py extract demo/w2_image_1.jpg demo/w2_image_2.jpg
+python run.py extract demo/w2_image_1.jpg --offline       # no API key: uses the ground-truth JSON
+```
+
+`FixtureW2Extractor` (the `--offline` reader) is a test double for CI and grading machines
+without a key. `data/fixtures/w2_prompt_injection.jpg` is a manual test for the real model:
+box c tells the AI to report box 1 as 0.00, and box 1 must still read 22,750.00.
 
 ## Eligibility & Rules (David)
 
@@ -197,3 +269,36 @@ TODO
 ### Inter-agent communication (Brendan)
 
 TODO
+
+## Security (Yassine)
+
+Code: `src/security/ssn.py`. Tests: `tests/extraction/test_ssn.py`.
+
+### SSNs (spec 3.2)
+
+- **Allow-list.** `check_ssn` accepts only 900-999 SSNs, the range the SSA reserves for testing.
+  Everything else is treated as possibly real. Intake should call it for the taxpayer, spouse
+  and dependents; Extraction calls it on W-2 box a.
+- **A possibly-real SSN is never stored.** Not in state, provenance, traces or error
+  messages: the record shows `[SSN REDACTED]` and an escalation explains why. Test SSNs are
+  kept only masked (`XXX-XX-3456`) in extraction records.
+- **Volunteered SSNs.** `contains_ssn` and `redact_ssns` let Intake catch an SSN typed where
+  none was asked for, and scrub it from the message before it reaches state or the model.
+- **Errors are scrubbed.** Model errors can echo their input, so they pass through
+  `redact_ssns` before reaching the trace.
+
+### Model and document safety
+
+- **Prompt injection.** Text on a document is data. The system prompt says so, structured
+  output limits what the model can return, and deterministic validation runs afterwards.
+- **The model never decides.** It transcribes strings; parsing and checks are plain Python.
+
+### Secrets
+
+API keys live in `.env`, which `.gitignore` excludes; `.env.example` lists every setting.
+
+### Known limitations
+
+- The W-2 image, including box a, is sent to the model provider. Acceptable here because only
+  test SSNs are allowed; a production system would mask box a before upload or host the model.
+- The dashboard has no authentication yet.
