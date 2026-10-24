@@ -1,0 +1,22 @@
+{
+  "reading": {
+    "tax_year": "2025",
+    "employee_ssn": "902-44-8765",
+    "employer_ein": "55-6667778",
+    "employer_name": "Harbor View Marina",
+    "employee_name": "Dorothy E. Placeholder",
+    "box1_wages": "22,750.00",
+    "box2_federal_withheld": "2,100.00",
+    "box3_ss_wages": "22,750.00",
+    "box4_ss_withheld": "1,410.50",
+    "box5_medicare_wages": "22,750.00",
+    "box6_medicare_withheld": "329.88",
+    "box12": [],
+    "unreadable_boxes": []
+  },
+  "expected": {
+    "status": "extracted",
+    "box1": "22750.00",
+    "escalations": []
+  }
+}

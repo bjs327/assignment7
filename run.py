@@ -2,6 +2,7 @@
 
     python run.py --help
     python run.py tax-math-server    start the tax_math MCP server on stdin/stdout
+    python run.py extract IMAGE...   read W-2 images with the Document Extraction agent
 
 Commands for the rest of the system (the intake session, the dashboard, the batch run
 with --no-context-strategy) get added here as the agents land.
@@ -25,12 +26,22 @@ def main(argv: list[str] | None = None) -> None:
         "tax-math-server",
         help="start the tax_math MCP server on stdin/stdout (used by the Computation agent)",
     )
+    extract = commands.add_parser(
+        "extract",
+        help="read W-2 images with the Document Extraction agent (add --offline to skip the model)",
+        add_help=False,
+    )
+    extract.add_argument("extract_args", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
 
     if args.command == "tax-math-server":
         from tax_math.server import main as serve
 
         serve()
+    elif args.command == "extract":
+        from agents.extraction.cli import main as extract_main
+
+        extract_main(args.extract_args)
 
 
 if __name__ == "__main__":

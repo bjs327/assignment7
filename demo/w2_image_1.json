@@ -1,0 +1,23 @@
+{
+  "reading": {
+    "tax_year": "2025",
+    "employee_ssn": "900-12-3456",
+    "employer_ein": "12-3456789",
+    "employer_name": "Maple Grove Public Library",
+    "employee_name": "Margaret A. Testwell",
+    "box1_wages": "18,500.00",
+    "box2_federal_withheld": "1,850.00",
+    "box3_ss_wages": "18,500.00",
+    "box4_ss_withheld": "1,147.00",
+    "box5_medicare_wages": "18,500.00",
+    "box6_medicare_withheld": "268.25",
+    "box12": [],
+    "unreadable_boxes": []
+  },
+  "expected": {
+    "status": "extracted",
+    "box1": "18500.00",
+    "box2": "1850.00",
+    "escalations": []
+  }
+}

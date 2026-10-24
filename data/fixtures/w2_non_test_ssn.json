@@ -1,0 +1,23 @@
+{
+  "reading": {
+    "tax_year": "2025",
+    "employee_ssn": "123-45-6789",
+    "employer_ein": "11-2223334",
+    "employer_name": "Riverbend Senior Center",
+    "employee_name": "Harold B. Sample",
+    "box1_wages": "9,000.00",
+    "box2_federal_withheld": "450.00",
+    "box3_ss_wages": "9,000.00",
+    "box4_ss_withheld": "558.00",
+    "box5_medicare_wages": "9,000.00",
+    "box6_medicare_withheld": "130.50",
+    "box12": [],
+    "unreadable_boxes": []
+  },
+  "expected": {
+    "status": "needs_review",
+    "escalations": [
+      "non_test_ssn"
+    ]
+  }
+}
