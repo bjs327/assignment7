@@ -16,7 +16,7 @@ between documents and answers, and any request for advice goes to a human.
 | Document Extraction | Yassine | W-2 extraction agent done (LangGraph nodes, tests) |
 | Eligibility & Rules | David | Placeholder |
 | Computation | Brendan | `tax_math` MCP server done, agent node next |
-| Review / Audit | Marco | Placeholder |
+| Review / Audit | Marco | Review agent done (independent re-check of every computed line, 3-round revision loop, 62 tests); LangGraph wiring next |
 
 ## Team roles
 
