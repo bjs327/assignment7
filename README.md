@@ -26,7 +26,7 @@ between documents and answers, and any request for advice goes to a human.
 | Inter agent communication | Brendan |
 | Task division and management | TODO |
 | MLOps/DevOps | TODO |
-| Guardrails and ethics | TODO |
+| Guardrails and ethics | Marco |
 | Security | Yassine |
 
 ## Setup
