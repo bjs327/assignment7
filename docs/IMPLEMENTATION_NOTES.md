@@ -96,7 +96,107 @@ box c tells the AI to report box 1 as 0.00, and box 1 must still read 22,750.00.
 
 ## Eligibility & Rules (David)
 
-TODO
+Decides whether the return is one SilverFile can prepare, and which rules apply to it: Form
+1040-SR eligibility, the filing status, the line 12d boxes, who qualifies for the senior
+deduction, which documents and schedules are in scope, and when a human has to step in. It
+never talks to the taxpayer, computes an amount, or calls `interrupt()`.
+
+Code: `src/agents/eligibility/`. Tests: `tests/eligibility/`. Rules: `data/policy.md`, section
+"Eligibility, scope and escalation rules".
+
+### Grounding: decisions are code, citations are the corpus
+
+No reference corpus came with the assignment, so the rules were taken from the specification
+and from irs.gov (2025 Form 1040 instructions; 2025 Instructions for Forms 1099-R and 5498) and
+written into `data/policy.md` with stable IDs (`ELIG-`, `FS-`, `SCOPE-`, `SCH-`, `ESC-`, `GRD-`).
+Each entry names its source and links to the IRS page.
+
+The decisions themselves are a deterministic decision table in plain Python
+(`rules_engine.py`), not model output. Same facts in, same decision out, and every outcome is
+unit-tested, including the date boundaries (born January 1 vs January 2, 1961; 70½ by
+December 31). Every finding, question and escalation cites rule IDs. `corpus.py` resolves each
+ID to the rule's title and source in `data/policy.md`, and raises if a cited ID has no entry. A
+test checks that every rule ID in the engine exists in the corpus.
+
+An LLM was deliberately not used for the decisions. The rules are crisp, a wrong answer here
+is expensive (a wrong status or deduction carries into every line after it), and the
+specification asks for decisions that cite the corpus. A model would add a way to be wrong
+without adding anything the table can't do.
+
+### What it decides
+
+| Decision | Rules | Output |
+|---|---|---|
+| Can the taxpayer use Form 1040-SR? (either spouse on a joint return) | ELIG-01 | `form_1040sr_eligible`; escalates if not |
+| Is the chosen filing status supported? | FS-01 to FS-06 | `filing_status`; escalates when ambiguous, and always when a spouse died in 2025 |
+| The four line 12d boxes, including the spouse-box conditions on a separate return | ELIG-02 | `line_12d` |
+| Who qualifies for the senior deduction (no one on married filing separately) | ELIG-03 | `senior_deduction` |
+| Does the Standard Deduction Chart apply? | ELIG-04 | escalates if claimable as a dependent, spouse itemizes on a separate return, or dual-status alien |
+| Is each document in scope, and which lines does it feed? | SCOPE-01 to SCOPE-05 | `documents` (e.g. IRA 1099-R to lines 4a and 4b, QCD flag) |
+| Which schedules apply | SCH-01 | `schedules` (Schedule B waits for Computation's lines 2b and 3b) |
+| Taxpayer vs document conflicts | ESC-02 | W-2 SSN matches nobody on the return, a spouse's document on a non-joint return, document count differs from the taxpayer's list, QCD for someone under 70½ |
+| Test SSNs only | GRD-03 | escalates; the number is never repeated |
+
+### Interface for other agents
+
+| Direction | Key | Shape |
+|---|---|---|
+| Intake -> Eligibility | `intake_record` | Intake's `IntakeRecord` (JSON) |
+| Intake -> Eligibility | `intake_answers` | Answers to this agent's questions, under the field names in `facts.QUESTIONS` |
+| Extraction -> Eligibility | `extracted_documents` | `ExtractionResult` dicts |
+| Hand entry -> Eligibility | `entered_documents` | `[{"document_id", "document_type", "recipient", "tax_year", "boxes": {...}}]`. For a 1099-R the boxes are `"7"` (codes), `"2b_taxable_not_determined"` and `"ira_sep_simple"`. |
+| Computation -> Eligibility | `computed_lines` | `{"2b": 1200, "3b": 300}`, for the Schedule B decision |
+| Dashboard -> Eligibility | `human_resolutions` | `[{"code", "document_id", "decision", "filing_status", "resolved_by", "resolved_at", "note"}]` |
+| Eligibility -> Orchestrator | `eligibility["status"]` | `complete` / `needs_facts` / `escalated` |
+| Eligibility -> Computation | `eligibility["computation_inputs"]` | Exactly the arguments of `standard_deduction` and `senior_deduction` (`filing_status`, the four boxes, `taxpayer_qualifies`, `spouse_qualifies`), plus `lived_apart_from_spouse_all_year` for `taxable_social_security`. Set only when the status is `complete`. |
+| Eligibility -> Intake (via Orchestrator) | `eligibility_reask`, `eligibility_notice` | Field names to ask, and a sentence explaining why. Map them onto Intake's `intake_reask` and `intake_notice`. |
+| Eligibility -> Orchestrator, dashboard | `escalations` | Same shape as Extraction's, plus `category`, `rule_ids` and `resolvable` |
+| Eligibility -> Review | `eligibility["findings"]` | Every decision with its reason, rule IDs and citations, and whether rules or a human decided it |
+
+Routing for the Orchestrator: `needs_facts` goes to Intake, `escalated` interrupts for a human
+and comes back here with `human_resolutions`, and `complete` goes to Computation. Wire it in
+with `add_eligibility_node(builder, entry="orchestrator", exit_to="orchestrator")`.
+
+### Questions Intake needs to ask
+
+Intake's record doesn't yet cover everything the rules need. These are requested through
+`eligibility_reask`, so Intake asks them only when they apply, one at a time:
+
+| Field | When asked |
+|---|---|
+| `spouse_died_in_2025` | Every status except qualifying surviving spouse |
+| `can_be_claimed_as_dependent`, `dual_status_alien` | Always |
+| `spouse_can_be_claimed_as_dependent` | Joint return, or a separate return where a spouse box might apply |
+| `spouse_itemizes` | Married filing separately |
+| `spouse_had_income`, `spouse_filing_return` | Married filing separately, spouse 65+ or blind |
+| `paid_over_half_home_cost` | Head of household, qualifying surviving spouse |
+| `spouse_death_year`, `remarried_before_end_of_2025`, `child_lived_with_you_all_year` | Qualifying surviving spouse |
+| `document.<id>.<box>` | A hand-entered 1099-R missing box 7, box 2b or the IRA/SEP/SIMPLE box |
+
+### Human resolutions
+
+Escalations are either resolvable or not. A preparer can resolve filing-status ambiguity (by
+choosing the status, or approving the one chosen) and taxpayer vs document conflicts. The agent
+then reruns and records the decision as a finding with `decided_by: "human"`, the person and the
+time. It carries on and asks for any new facts the human's choice needs, for example spouse
+details after a switch to a joint return. Out-of-scope items, a 1099-R with box 2b checked, the
+chart exclusions and non-test SSNs can't be approved away: those returns stay with a human.
+
+### Trying it
+
+```bash
+python run.py eligibility data/fixtures/eligibility_clean_mfj.json
+python run.py eligibility data/fixtures/eligibility_spouse_died.json
+python run.py eligibility data/fixtures/eligibility_spouse_died.json --resolve married_filing_jointly
+```
+
+### Known limits
+
+- Whether a dependent meets every dependency test is not decided. Dependents are taken as
+  stated; only the head of household and qualifying surviving spouse checks look at them.
+- Taxpayer vs document conflicts are checked on identifiers (SSN, recipient, counts, age), not
+  on amounts. Comparing amounts is Review's job.
+- A deceased taxpayer (as opposed to a deceased spouse) isn't handled specially.
 
 ## Computation and the tax_math MCP server (Brendan)
 

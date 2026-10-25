@@ -14,7 +14,7 @@ between documents and answers, and any request for advice goes to a human.
 | Orchestrator | Verena | Placeholder |
 | Intake | Jordan | Placeholder |
 | Document Extraction | Yassine | W-2 extraction agent done (LangGraph nodes, tests) |
-| Eligibility & Rules | David | Placeholder |
+| Eligibility & Rules | David | Done: decision table grounded in `data/policy.md`, LangGraph node, tests |
 | Computation | Brendan | `tax_math` MCP server done, agent node next |
 | Review / Audit | Marco | Review agent done (independent re-check of every computed line, 3-round revision loop, 62 tests); LangGraph wiring next |
 
@@ -68,13 +68,20 @@ python run.py extract demo/w2_image_1.jpg demo/w2_image_2.jpg     # needs an API
 python run.py extract demo/w2_image_1.jpg --offline               # no key needed
 ```
 
+To try the Eligibility & Rules agent (no key needed):
+
+```bash
+python run.py eligibility data/fixtures/eligibility_clean_mfj.json
+python run.py eligibility data/fixtures/eligibility_spouse_died.json --resolve married_filing_jointly
+```
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-There are about 330 tests for `tax_math`, about 30 for Document Extraction and SSN security
+There are about 330 tests for `tax_math`, about 30 for Document Extraction and SSN security, about 85 for Eligibility & Rules
 (no API key needed), plus two skipped placeholders for tests other
 components still need to write.
 
@@ -95,7 +102,7 @@ components still need to write.
 │   └── tax_math/                done: deterministic 2025 arithmetic and its MCP server
 ├── data/
 │   ├── generate_fixtures.py     fake W-2 images with ground-truth JSON
-│   ├── policy.md                reference corpus: computation rules done, eligibility rules TODO
+│   ├── policy.md                reference corpus: computation and eligibility rules
 │   └── fixtures/
 ├── evals/cases.json             placeholder
 ├── tests/
