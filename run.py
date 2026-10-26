@@ -4,9 +4,10 @@
     python run.py tax-math-server    start the tax_math MCP server on stdin/stdout
     python run.py extract IMAGE...   read W-2 images with the Document Extraction agent
     python run.py eligibility FILE   run Eligibility & Rules on a state file (JSON)
+    python run.py intake             run (or resume) an intake interview in the terminal
 
-Commands for the rest of the system (the intake session, the dashboard, the batch run
-with --no-context-strategy) get added here as the agents land.
+Commands for the rest of the system (the dashboard, the batch run with
+--no-context-strategy) get added here as the agents land.
 """
 
 import argparse
@@ -39,6 +40,11 @@ def main(argv: list[str] | None = None) -> None:
         add_help=False,
     )
     eligibility.add_argument("eligibility_args", nargs=argparse.REMAINDER)
+    intake = commands.add_parser(
+        "intake", help="run or resume a taxpayer intake interview in the terminal"
+    )
+    intake.add_argument("--session", default="demo_taxpayer_001", help="session ID to start or resume")
+    intake.add_argument("--db", default=None, help="SQLite file for saved sessions")
     args = parser.parse_args(argv)
 
     if args.command == "tax-math-server":
@@ -53,6 +59,10 @@ def main(argv: list[str] | None = None) -> None:
         from agents.eligibility.cli import main as eligibility_main
 
         eligibility_main(args.eligibility_args)
+    elif args.command == "intake":
+        from agents.intake import main as run_intake
+
+        run_intake(["--session", args.session] + (["--db", args.db] if args.db else []))
 
 
 if __name__ == "__main__":
