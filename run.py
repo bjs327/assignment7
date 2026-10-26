@@ -5,6 +5,7 @@
     python run.py extract IMAGE...   read W-2 images with the Document Extraction agent
     python run.py eligibility FILE   run Eligibility & Rules on a state file (JSON)
     python run.py intake             run (or resume) an intake interview in the terminal
+    python run.py review             review a paused session as a preparer
 
 Commands for the rest of the system (the dashboard, the batch run with
 --no-context-strategy) get added here as the agents land.
@@ -45,6 +46,11 @@ def main(argv: list[str] | None = None) -> None:
     )
     intake.add_argument("--session", default="demo_taxpayer_001", help="session ID to start or resume")
     intake.add_argument("--db", default=None, help="SQLite file for saved sessions")
+    review = commands.add_parser(
+        "review", help="review a session that is waiting for a preparer's decision"
+    )
+    review.add_argument("--session", required=True, help="session ID to review")
+    review.add_argument("--db", default=None, help="SQLite file for saved sessions")
     args = parser.parse_args(argv)
 
     if args.command == "tax-math-server":
@@ -63,6 +69,10 @@ def main(argv: list[str] | None = None) -> None:
         from agents.intake import main as run_intake
 
         run_intake(["--session", args.session] + (["--db", args.db] if args.db else []))
+    elif args.command == "review":
+        from agents.orchestrator.human_review import main as run_review
+
+        run_review(["--session", args.session] + (["--db", args.db] if args.db else []))
 
 
 if __name__ == "__main__":

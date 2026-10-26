@@ -12,7 +12,104 @@ One section per component and per focus area, each written by its owner.
 
 ## Orchestrator (Verena)
 
-TODO
+Decides which agent acts next and owns termination. It never extracts, computes or talks to
+the taxpayer: it reads each agent's status, chooses the next step, and records why in a task
+ledger. It also owns the one place a person steps in, the human review step.
+
+Code: `src/agents/orchestrator/`, `src/state.py`, `src/graph.py`. Tests:
+`tests/test_decision_table.py`, `tests/test_merge_order.py`, `tests/orchestrator/`.
+
+### Topology: hub and spoke
+
+```
+START -> orchestrator -> intake | extraction | eligibility_rules | computation | review
+                         | human_review | finalize -> END
+         (every agent and human_review returns to the orchestrator)
+```
+
+Only the orchestrator's conditional edge chooses the next node; agents never call each other.
+The return has ordering dependencies (Computation needs Eligibility; line 6b needs the rest of
+income), work has to go backwards when Review sends it back or a taxpayer corrects an answer,
+and any agent can raise something a person must see. With one decision point, the order comes
+from dependencies, send-backs are tasks reopened, and nothing runs past an open escalation.
+
+### How it decides
+
+After every step it: records the outcome in the task ledger; ends the run if a preparer chose
+"stop"; sends the run to human review if any escalation is open; ends the run if Review
+approved and nothing is left to redo; runs the loop guard; otherwise runs the first pending or
+stale task whose dependencies are done.
+
+| After | Result | Next |
+|---|---|---|
+| Eligibility & Rules | `needs_facts` / `escalated` | Intake with its questions (`intake_reask`, `intake_notice`) / human review |
+| Computation | `needs_input` / `blocked` / `error` | where each `computation_missing` entry says / Eligibility / human review |
+| Review | `revise` / `escalate` / `approved` | the agents `next_hops()` names (send-backs to Intake go to a preparer, who picks the questions) / human review / finalize |
+
+### Task ledger
+
+`task_ledger` holds one record per agent stage: status (`pending`, `running`, `done`, `stale`,
+`escalated`, `stopped`), dependencies, attempts, timestamps and a plain-English note. Routing is
+driven by it. When a task runs again, every finished task that depends on it is marked stale
+and re-runs in order, so nothing is left computed from old answers.
+
+### Parallel branch, review loop and loop guard
+
+- **Parallel branch:** Extraction fans out one branch per W-2 and aggregates once. Reducers in
+  `state.py` (`merge_extractions`, `merge_escalation_records`) key and sort their results, so
+  the merged state is the same in any arrival order (`tests/test_merge_order.py`). `graph.py`
+  wires Extraction's and Eligibility's nodes directly, wrapped to run on `SilverFileState`,
+  because their own state types declare a different `escalations` reducer.
+- **Review loop:** `revise` reopens the agents Review names. Review's bound is three reviews
+  (`MAX_REVIEW_ITERATIONS`); the full-graph test checks a non-converging review stops at three.
+- **Loop guard:** before each routing decision, `route_history` goes to `detect_handoff_cycle`.
+  A pattern of one to four hand-offs repeated three times in a row raises a `handoff_cycle`
+  escalation and the run pauses for a person. It only counts hand-offs since a person last
+  stepped in, and an approval is checked first, so a revise loop that ends in approval isn't
+  flagged. It catches a real cycle today: Eligibility asks for facts Intake doesn't ask yet, and
+  Intake -> Extraction -> Eligibility repeats.
+
+### Human review (specification section 4.4)
+
+One shared node, part of the orchestrator, reached only through it. It lists every open
+escalation with the preparer's options, pauses with `interrupt()` (`"type": "human_review"`),
+checks the answer (pausing again if anything is wrong), records each decision and hands control
+back. Stop is always available; if any issue is stopped, the run ends with a handoff package and
+the taxpayer gets no draft.
+
+| Issue | Options for the preparer |
+|---|---|
+| Spouse died in 2025, or filing status doesn't fit the answers | Choose the filing status yourself · Re-ask · Stop |
+| Answer doesn't match a document | Accept the documents as they are · Re-ask · Stop |
+| Taxpayer's answers contradict each other | Re-ask · Stop |
+| Out-of-scope topic mentioned | Dismiss: false alarm · Stop |
+| Out-of-scope document, or other out-of-scope result | Re-ask · Stop |
+| 1099-R box 2b "taxable amount not determined" | Stop only |
+| Non-test SSN; W-2 for the wrong year or uploaded twice | Re-ask · Stop |
+| W-2 couldn't be read | Re-read the document · Stop |
+| Tax-advice request | Noted, I'll follow up · Stop |
+| Exploitation or third-party pressure | Checked: safe to continue (reason required) · Stop |
+| Review limit or loop; loop guard; tax_math tool error | Re-ask · Stop |
+
+Anything else gets Re-ask or Stop only. Each decision is recorded in `human_decisions` (who,
+when, what, note), marks the escalation resolved, and writes what the next agent needs
+(`human_resolutions` for Eligibility, `intake_reask` for Intake, `reextract_document_ids` for
+Extraction, `preparer_notes`). For the dashboard: `pending_review(graph, session_id)` and
+`submit_decisions(graph, session_id, answer)`.
+
+### Termination
+
+`finalize` gathers the draft and its audit record into `final_package`: the draft return with
+provenance, intake record, documents, Eligibility's findings, Review's report, escalations,
+human decisions, the task ledger and the route taken. `run_status` ends as `approved` or
+`handed_to_preparer`. Nothing is filed.
+
+### Trying it
+
+```bash
+python -m pytest tests/test_decision_table.py tests/test_merge_order.py tests/orchestrator
+python run.py review --session SESSION_ID    # review a session paused for a preparer
+```
 
 ## Intake (Jordan)
 
