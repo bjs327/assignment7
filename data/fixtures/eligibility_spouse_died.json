@@ -1,0 +1,22 @@
+{
+  "intake_record": {
+    "tax_year": 2025,
+    "filing_status": "single",
+    "lived_apart_from_spouse_all_year": null,
+    "taxpayer": {"ssn": "900-45-6789", "date_of_birth": "1952-11-20", "legally_blind": false},
+    "spouse": null,
+    "dependents": [],
+    "documents": [{"type": "SSA-1099", "count": 1, "in_scope": true, "description": null}],
+    "estimated_payments": [],
+    "confirmed_by_taxpayer": true
+  },
+  "intake_answers": {
+    "spouse_died_in_2025": true,
+    "can_be_claimed_as_dependent": false,
+    "dual_status_alien": false
+  },
+  "entered_documents": [
+    {"document_id": "ssa-1", "document_type": "SSA-1099", "recipient": "taxpayer", "tax_year": 2025,
+     "boxes": {"5": "21000.00"}}
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "intake_record": {
+    "tax_year": 2025,
+    "filing_status": "married_filing_jointly",
+    "lived_apart_from_spouse_all_year": null,
+    "taxpayer": {"ssn": "900-12-3456", "date_of_birth": "1950-05-10", "legally_blind": false},
+    "spouse": {"ssn": "901-22-3333", "date_of_birth": "1963-07-04", "legally_blind": true},
+    "dependents": [],
+    "documents": [
+      {"type": "W-2", "count": 1, "in_scope": true, "description": null},
+      {"type": "1099-R", "count": 1, "in_scope": true, "description": null}
+    ],
+    "estimated_payments": [],
+    "confirmed_by_taxpayer": true
+  },
+  "intake_answers": {
+    "spouse_died_in_2025": false,
+    "can_be_claimed_as_dependent": false,
+    "spouse_can_be_claimed_as_dependent": false,
+    "dual_status_alien": false
+  },
+  "extracted_documents": [
+    {
+      "document_id": "w2-1",
+      "document_type": "W-2",
+      "status": "extracted",
+      "attempt": 1,
+      "identifiers": {"employee_ssn_masked": "XXX-XX-3333", "ssn_check": "valid_test", "tax_year": "2025"},
+      "fields": {"1": {"value": "18500.00"}, "2": {"value": "1200.00"}}
+    }
+  ],
+  "entered_documents": [
+    {
+      "document_id": "1099r-1",
+      "document_type": "1099-R",
+      "recipient": "taxpayer",
+      "tax_year": 2025,
+      "boxes": {"1": "12000.00", "2a": "12000.00", "7": "7Y", "2b_taxable_not_determined": false, "ira_sep_simple": true}
+    }
+  ]
+}
