@@ -9,18 +9,21 @@ TODO: combine each member's notes below into the final paragraph.
 
 ## Notes by component
 
-### Computation and tax_math (Brendan)
+### Computation, tax_math and inter-agent communication (Brendan)
 
-These notes were drafted by the AI and need Brendan's review before they go into the final
-paragraph.
+These notes were drafted by the AI from the working session and need Brendan's review before
+they go into the final paragraph.
 
-- **Tool:** Claude Code in the Claude desktop app, with the Claude Opus 5.5 model.
+- **Tool:** Claude Code in the Claude desktop app, with the Claude Opus 5.5 model, used
+  throughout as a pair programmer. Brendan set the direction and approved each step; Claude
+  proposed plans, wrote the code and tests, and ran them.
 - **Planning:**
   - Prepared questions for the client Q&A, then turned the answers into design decisions.
   - Drafted the Computation row of the team's agent inputs and outputs sheet.
   - Reviewed the process map and suggested changes.
-  - Drafted the plan for the Computation agent and the tax_math MCP server.
-- **Building (steps 1 to 3 of that plan):**
+  - Drafted the plan for the Computation agent and the tax_math MCP server, which Brendan
+    reviewed before any code was written.
+- **tax_math and its MCP server:**
   - Claude wrote the `tax_math` package, the MCP server and about 330 tests.
   - Before coding, it checked the 2025 tax brackets and the IRS Pub. 915 Social Security
     worksheet against web sources. The deduction amounts come from the specification.
@@ -29,10 +32,36 @@ paragraph.
   - Testing caught two problems, which Claude fixed: an error message that read differently
     through MCP than in a direct call, and a test that compared a rounded line with an unrounded
     one.
-  - Claude also arranged the files into the assignment's repository layout and created
-    placeholder files for components other team members own.
-- **Brendan's own role:** TODO. Describe your review, edits and decisions. For example, you kept
-  tax year 2025 after Claude pointed out that the specification requires it.
+  - At Brendan's request, Claude then reviewed the code for mistakes and unnecessary complexity.
+    It found 3 mistakes and 6 simplifications, and fixed all 9 once Brendan approved them.
+- **Repository and team workflow:**
+  - Claude arranged the files into the assignment's repository layout, with placeholder files
+    for components other team members own, and made the first commit and push.
+  - It reviewed and merged three teammates' pull requests (#2, #3 and #4). It test-merged each
+    one, ran the full test suite, checked role boundaries and SSN handling, and resolved one
+    conflict in `run.py` by keeping every command.
+  - It drafted the repository overview and check-in status notes Brendan shared with the team.
+- **Computation agent:**
+  - Claude read the other agents' code to find the formats Computation receives (Extraction,
+    Intake, Eligibility) and must produce (the `draft_return` that Review checks).
+  - It wrote the agent (`src/agents/computation/`), three new rules in `data/policy.md`
+    (LINE-01 to LINE-03) and 16 tests, including one that runs a sample return through the
+    real Eligibility, Computation and Review agents. The expected line values were worked out by
+    hand from the IRS rules.
+  - Testing caught an error in Claude's own test data: a charitable IRA distribution needs the
+    owner to be at least 70½. The Eligibility agent correctly escalated it, and the test data was
+    fixed.
+- **Inter-agent communication:** while doing the above, Claude identified the integration gaps
+  recorded in `docs/IMPLEMENTATION_NOTES.md`:
+  - The W-2 field names differ between Extraction's output and the Eligibility sample data.
+  - Nobody collects the 1099 and SSA-1099 amounts or the Schedule 1 to 3 entries yet.
+  - Eligibility and Review disagree on whether capital gain distributions may appear on line 7.
+- **Brendan's decisions so far:**
+  - Kept tax year 2025 after Claude pointed out that the specification requires it.
+  - Asked for the code review to put simplicity first, and approved the fixes.
+  - Chose where the repository lives, and directed the merges and the Computation work.
+- **Brendan's own review:** TODO. Describe how you checked Claude's work and anything you changed
+  yourself.
 
 ### Eligibility & Rules (David)
 

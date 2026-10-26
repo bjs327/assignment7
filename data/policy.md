@@ -142,6 +142,58 @@ dollars. Qualified dividends are not given their lower rates in this version.
 Source: Rev. Proc. 2024-40; 2025 Form 1040 instructions, Tax Rate Schedules; SilverFile
 specification, section 3.1 (line 16).
 
+### LINE-01: Where each document's amounts go on the return
+
+| Document | Box | Form line |
+|---|---|---|
+| W-2 | 1 (wages) | 1z |
+| W-2 | 2 (federal tax withheld) | 25a |
+| SSA-1099 | 5 (net benefits) | 6a |
+| SSA-1099 | 6 (voluntary tax withheld) | 25b |
+| 1099-INT | 1 and 3 (taxable interest, including U.S. savings bonds and Treasury obligations) | 2b |
+| 1099-INT | 8 (tax-exempt interest) | 2a |
+| 1099-DIV | 1a (ordinary dividends) | 3b |
+| 1099-DIV | 1b (qualified dividends) | 3a |
+| 1099-DIV | 2a (capital gain distributions) | 7 |
+| 1099-INT, 1099-DIV, 1099-R | 4 (federal tax withheld) | 25b |
+| 1099-R | 1 (gross distribution) | 4a for an IRA, otherwise 5a |
+| 1099-R | 2a (taxable amount) | 4b for an IRA, otherwise 5b |
+
+A qualified charitable distribution (1099-R code Y) is left out of line 4b: line 4b is the
+taxable amount less the part that went directly to charity. Which line a 1099-R feeds comes
+from Eligibility & Rules.
+
+Source: 2025 Form 1040 instructions, lines 1 to 7 and 25; SilverFile specification, section 3.1.
+
+### LINE-02: How the total lines are built
+
+Each total line is the sum or difference the form prints next to it:
+
+- **Line 9:** lines 1z, 2b, 3b, 4b, 5b, 6b, 7 and 8.
+- **Line 11a:** line 9 less line 10.
+- **Line 14:** lines 12e, 13a and 13b.
+- **Line 15:** line 11a less line 14, not below zero.
+- **Line 18:** lines 16 and 17.
+- **Line 21:** lines 19 and 20.
+- **Line 22:** line 18 less line 21, not below zero.
+- **Line 24:** lines 22 and 23.
+- **Line 25d:** lines 25a, 25b and 25c.
+- **Line 26:** the estimated payments, as reported.
+- **Line 33:** lines 25d, 26 and 32.
+- **Line 34 (overpaid):** line 33 less line 24, if more than zero.
+- **Line 37 (amount owed):** line 24 less line 33, if more than zero.
+
+Source: 2025 Form 1040-SR, the instructions printed on each line.
+
+### LINE-03: Amounts entered directly
+
+Amounts from Schedules 1, 2 and 3 are entered directly rather than computed (lines 8, 10, 17, 19,
+20, 23 and 32). Each one records who entered it and when. Student loan interest is recorded
+separately from the rest of line 10, because the Social Security worksheet leaves it out (see
+SSA-01).
+
+Source: SilverFile specification, sections 3.1 and 3.3.
+
 ## Eligibility, scope and escalation rules
 
 Cited by the Eligibility & Rules agent (`src/agents/eligibility/`). Its decisions quote these

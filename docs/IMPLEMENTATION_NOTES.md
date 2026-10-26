@@ -205,9 +205,43 @@ from a tool in `src/tax_math`, a package of deterministic 2025 Form 1040-SR arit
 as an MCP server. Each tool returns the number together with its working and the rules it
 relies on, which becomes that line's provenance record.
 
-Status: the `tax_math` package, the MCP server and their tests are done. The Computation agent
-node (`src/agents/computation.py`) is next. It needs the record format from Document Extraction
-and the output format from Eligibility & Rules.
+Status: done. The `tax_math` package, its MCP server and the Computation agent
+(`src/agents/computation/`) are built and tested. A sample return runs through the real
+Eligibility, Computation and Review agents, and Review approves it with no findings.
+
+### The Computation agent
+
+`make_computation_node()` returns a LangGraph node. Each run:
+
+1. **Gathers its inputs** (`inputs.py`): W-2s from `extracted_documents`, typed-in forms from
+   `entered_documents`, the line 12d boxes and senior deduction qualifiers from
+   `eligibility["computation_inputs"]`, estimated payments from `intake_record`, and direct
+   entries from `entered_amounts`. Anything missing becomes a `computation_missing` entry naming
+   the agent that can supply it. Nothing is assumed.
+2. **Fills in every line in dependency order** (`agent.py`): income lines, then 6b, then 9, 11a,
+   12e, 13b, 14, 15 and 16, then the tax and payment totals, then 34 and 37. Every dollar
+   amount, including plain totals, comes from a `tax_math` call through the MCP server
+   (`caller.py`, in-process: about 20 ms a call).
+3. **Writes `draft_return`** in the format Review checks (documented at the top of
+   `src/agents/review/checks.py`). Each line keeps the tool, its exact arguments (so Review can
+   replay it), the working, the rule citations and the source documents.
+
+Every run recomputes the whole return, so a send-back from Review can never leave a stale line.
+
+| `computation_status` | Orchestrator's next hop |
+|---|---|
+| `complete` | Review |
+| `needs_input` | the agent named in each `computation_missing` entry, usually Intake |
+| `blocked` | Eligibility & Rules, which hasn't finished |
+| `error` | a human: a tool refused inputs that had passed every other check |
+
+**Inputs nobody collects yet** (Intake or the dashboard need to add these):
+
+- `entered_documents` boxes for SSA-1099 (box 5, and 6 if any), 1099-INT (1, 3, 4, 8), 1099-DIV
+  (1a, 1b, 2a, 4) and 1099-R (1, 2a, 4).
+- `qcd_amount` on a 1099-R with code Y: how much went directly to charity.
+- `entered_amounts`, keyed by form line (`"8"`, `"10"`, `"17"`, `"19"`, `"20"`, `"23"`, `"32"`
+  and `"student_loan_interest"`), each as `{"amount", "entered_by", "entered_at"}`.
 
 ### Layout
 
