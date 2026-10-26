@@ -83,3 +83,20 @@ paragraph.
   right, the test data was wrong), and after a human switched a return to married filing
   jointly the agent didn't ask for the spouse's details. Claude fixed the second.
 - **David's own role:** TODO. Describe your review, edits and decisions.
+
+
+### Intake Agent and Agent Memory (Jordan)
+
+- **Tool:** Claude Code in VS Code was used as a pair-programming assistant to develop, debug, and test the Intake Agent and Agent Memory. ChatGPT was also used for planning, troubleshooting LangGraph, and understanding integration requirements.
+
+- **Planning:** Defined the Intake Agent's inputs, outputs, and responsibilities. Built an initial LangGraph prototype before integrating it into the team's GitHub repository.
+
+- **Intake Agent:** Claude developed `src/agents/intake.py` to collect taxpayer information, handle corrections, validate test SSNs, and flag situations requiring human review. The agent asks questions individually and does not perform tax calculations or interpret tax rules.
+
+- **Agent Memory:** Claude implemented SQLite checkpointing in `src/memory.py`, allowing taxpayers to pause and resume sessions while preserving their answers and conversation progress.
+
+- **Testing and Debugging:** Claude generated automated tests and identified issues involving missing Eligibility questions, repeated requests, and LangGraph interrupts. These were addressed through additional question handling, improved state management, and duplicate-request protection.
+
+- **Integration:** Claude helped identify shared-state issues between Intake, Eligibility, Computation, and the Orchestrator. Additional changes were made to improve communication and prevent infinite loops.
+
+- **Jordan's Contributions:** I reviewed the assignment requirements, guided the implementation, configured LangGraph, tested the agent independently, verified session persistence, managed GitHub contributions, and coordinated integration improvements with teammates.
