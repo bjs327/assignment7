@@ -160,6 +160,7 @@ def test_intake_never_computes_totals_or_ages(graph):
         "dependents",
         "documents",
         "estimated_payments",
+        "additional_facts",
         "confirmed_by_taxpayer",
     }
     assert set(record["taxpayer"]) == {"ssn", "date_of_birth", "legally_blind"}
@@ -370,7 +371,7 @@ def test_out_of_scope_documents_are_recorded_and_flagged(graph):
     assert out["intake_escalations"][0]["reason"] == "a 1099-NEC"
 
 
-def test_financial_exploitation_is_flagged(graph):
+def test_financial_exploitation_is_flagged_and_stops_the_interview(graph):
     turns = drive(
         graph,
         "s",
@@ -379,7 +380,8 @@ def test_financial_exploitation_is_flagged(graph):
             "My grandson takes my social security checks and told me to send him gift cards",
         ],
     )
-    assert "Elder Fraud Hotline" in turns[-1]["notice"]
+    assert turns[-1]["status"] == "awaiting_human"  # no further questions
+    assert "Elder Fraud Hotline" in turns[-1]["output"]["intake_message"]
     assert "financial_exploitation" in [e["type"] for e in _escalations(graph)]
 
 
@@ -607,6 +609,9 @@ class ParentState(TypedDict, total=False):
     intake_escalations: list
     intake_reask: list[str]
     intake_notice: str
+    intake_requests: dict[str, Any]  # proposed for src/state.py
+    intake_message: str  # proposed for src/state.py
+    human_decisions: list
     needs_human_review: bool
     trail: Annotated[list[str], operator.add]
 

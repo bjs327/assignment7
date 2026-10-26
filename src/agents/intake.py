@@ -31,13 +31,29 @@ passed on as dates for Eligibility & Rules to interpret.
 Contract with the Orchestrator
 ------------------------------
 Input (``IntakeInput``): ``session_id``, plus optionally the answers, corrections and
-escalations from an earlier run, ``intake_reask`` (fields to ask again, for example after
-Review finds a conflict with a document) and ``intake_notice`` (a sentence to show the taxpayer
-explaining why).
+escalations from an earlier run, ``intake_reask`` (fields to ask, for example after Review
+finds a conflict with a document, or facts Eligibility & Rules or Computation need) and
+``intake_notice`` (a sentence to show the taxpayer explaining why). ``human_decisions`` is
+read, never written, to know which of Intake's flags a person has closed.
 
-Output (``IntakeOutput``): ``intake_status`` ("complete"), ``intake_record`` (validated
-``IntakeRecord`` as JSON), ``intake_answers``, ``intake_corrections``, ``intake_escalations``
-and ``needs_human_review``.
+Requested fields (``intake_reask``) are handled like this, so a request never disappears:
+
+* a question on the standard plan is asked again;
+* a question in ``ADDITIONAL_QUESTIONS`` (facts Eligibility & Rules asks for) is added to the
+  plan, and its answer is kept in ``intake_answers`` under the requested field name, which is
+  where the requesting agent reads it;
+* anything else (for example ``document.<id>.<box>``) raises an ``unsupported_request`` flag;
+* a field that has already been answered but is requested more than
+  ``MAX_REQUESTS_PER_FIELD`` times raises a ``repeated_request`` flag instead of asking again.
+
+Output (``IntakeOutput``): ``intake_status`` ("complete", or "awaiting_human" when the
+interview stopped for a person), ``intake_record`` (validated ``IntakeRecord`` as JSON),
+``intake_answers``, ``intake_corrections``, ``intake_escalations``, ``intake_requests`` (what
+happened to each requested field), ``intake_message`` (what the taxpayer was told when the
+interview stopped) and ``needs_human_review``.
+
+Suspected financial exploitation, or the taxpayer asking for a person, stops the interview at
+once (``intake_hold``) until a person has decided on the flag.
 
 Use ``build_intake_graph()`` either standalone with a checkpointer, driven by
 ``start_or_resume`` and ``submit_answer``, or as a subgraph node in the Orchestrator's graph
@@ -64,6 +80,7 @@ from memory import (
     redact_ssns,
     session_config,
 )
+from state import intake_escalation_id
 from tax_math.models import FilingStatus
 
 TAX_YEAR = 2025
@@ -75,8 +92,17 @@ MAX_ESTIMATED_PAYMENTS = 12
 # --- Schemas -------------------------------------------------------------------------------
 
 EscalationType = Literal[
-    "tax_advice_request", "out_of_scope", "conflicting_information", "financial_exploitation"
+    "tax_advice_request",
+    "out_of_scope",
+    "conflicting_information",
+    "financial_exploitation",
+    "human_requested",  # the taxpayer asked to speak with a person
+    "unsupported_request",  # another agent asked for something Intake can't collect
+    "repeated_request",  # another agent keeps asking for an answer Intake already has
 ]
+
+# Flags that stop the interview until a person has decided on them.
+BLOCKING_ESCALATIONS = {"financial_exploitation", "human_requested"}
 
 
 class Escalation(TypedDict):
@@ -94,6 +120,14 @@ class Correction(TypedDict):
     at: str
 
 
+class RequestStatus(TypedDict):
+    """One field another agent asked for through ``intake_reask``."""
+
+    requested: int  # times Intake was sent this field
+    status: Literal["pending", "answered", "unsupported", "repeated"]
+    cleared: int  # repeated_request flags a person has decided on and Intake has acted on
+
+
 class IntakeInput(TypedDict, total=False):
     session_id: str
     intake_answers: dict[str, Any]
@@ -101,15 +135,20 @@ class IntakeInput(TypedDict, total=False):
     intake_escalations: list[Escalation]
     intake_reask: list[str]
     intake_notice: str
+    intake_requests: dict[str, RequestStatus]
+    human_decisions: list[dict[str, Any]]  # read only: which of Intake's flags a person closed
 
 
 class IntakeOutput(TypedDict, total=False):
     session_id: str
-    intake_status: Literal["in_progress", "complete"]
+    # "awaiting_human": the interview stopped for a flag a person must see first.
+    intake_status: Literal["in_progress", "complete", "awaiting_human"]
     intake_record: dict[str, Any] | None
     intake_answers: dict[str, Any]
     intake_corrections: list[Correction]
     intake_escalations: list[Escalation]
+    intake_requests: dict[str, RequestStatus]
+    intake_message: str  # the last thing said to the taxpayer when the interview stopped
     needs_human_review: bool
 
 
@@ -165,6 +204,9 @@ class IntakeRecord(BaseModel):
     dependents: list[Dependent] = []
     documents: list[DocumentItem] = []
     estimated_payments: list[EstimatedPayment] = []
+    additional_facts: dict[str, bool | int] = Field(
+        default={}, description="Answers to questions other agents asked for (ADDITIONAL_QUESTIONS)."
+    )
     confirmed_by_taxpayer: bool
 
 
@@ -175,9 +217,86 @@ OUTPUT_KEYS = tuple(IntakeOutput.__annotations__)
 MARRIED = {FilingStatus.MARRIED_FILING_JOINTLY.value, FilingStatus.MARRIED_FILING_SEPARATELY.value}
 DEPENDENT_ATTRS = ("name", "relationship", "dob", "ssn")
 
+# Questions Intake asks only when another agent requests them through the Orchestrator
+# (``intake_reask``). Keys are the field names the requesting agent reads back from
+# ``intake_answers`` (Eligibility & Rules: ``facts.QUESTIONS``). Intake owns the wording.
+# Value: (answer kind, question, short label for the summary).
+ADDITIONAL_QUESTIONS: dict[str, tuple[str, str, str]] = {
+    "spouse_died_in_2025": (
+        "yes_no",
+        "Did your husband or wife pass away during 2025? (yes/no)",
+        "Spouse passed away in 2025",
+    ),
+    "spouse_death_year": (
+        "year",
+        "In what year did your husband or wife pass away? (for example 2024)",
+        "Year your spouse passed away",
+    ),
+    "remarried_before_end_of_2025": (
+        "yes_no",
+        "Did you remarry before the end of 2025? (yes/no)",
+        "Remarried before the end of 2025",
+    ),
+    "can_be_claimed_as_dependent": (
+        "yes_no",
+        "Can anyone else claim you as a dependent on their tax return? (yes/no)",
+        "Someone else can claim you as a dependent",
+    ),
+    "spouse_can_be_claimed_as_dependent": (
+        "yes_no",
+        "Can anyone else claim your husband or wife as a dependent on their tax return? (yes/no)",
+        "Someone else can claim your spouse as a dependent",
+    ),
+    "dual_status_alien": (
+        "yes_no",
+        "During 2025, were you a U.S. citizen or resident for only part of the year? (yes/no)",
+        "U.S. citizen or resident for only part of 2025",
+    ),
+    "spouse_itemizes": (
+        "yes_no",
+        "Is your husband or wife itemizing deductions on their own return? (yes/no)",
+        "Spouse itemizes on their own return",
+    ),
+    "spouse_had_income": (
+        "yes_no",
+        "Did your husband or wife have any income in 2025? (yes/no)",
+        "Spouse had income in 2025",
+    ),
+    "spouse_filing_return": (
+        "yes_no",
+        "Is your husband or wife filing their own tax return for 2025? (yes/no)",
+        "Spouse is filing their own return",
+    ),
+    "paid_over_half_home_cost": (
+        "yes_no",
+        "Did you pay more than half the cost of keeping up your home in 2025? (yes/no)",
+        "Paid more than half the cost of your home",
+    ),
+    "child_lived_with_you_all_year": (
+        "yes_no",
+        "Did your child live with you for all of 2025? (yes/no)",
+        "Your child lived with you all year",
+    ),
+}
 
-def question_plan(answers: dict[str, Any]) -> list[str]:
-    """Every question that applies, in order, given the answers so far."""
+# Other agents' names for fields Intake already asks under its own name.
+REQUEST_ALIASES = {
+    "lived_apart_from_spouse_all_year": "lived_apart_all_year",  # Computation
+}
+
+MAX_REQUESTS_PER_FIELD = 3  # after this many requests for an answered field, ask a person
+
+
+def canonical_field(field: str) -> str:
+    return REQUEST_ALIASES.get(field, field)
+
+
+def question_plan(answers: dict[str, Any], requested: Any = ()) -> list[str]:
+    """Every question that applies, in order, given the answers so far.
+
+    ``requested``: fields other agents have asked for. Additional questions appear in the plan
+    once requested, and stay in it once answered, so their answers are never pruned.
+    """
     status = answers.get("filing_status")
     plan = ["filing_status"]
     if status == FilingStatus.MARRIED_FILING_SEPARATELY.value:
@@ -195,6 +314,8 @@ def question_plan(answers: dict[str, Any]) -> list[str]:
         plan.append("estimated_payment_count")
         for n in range(1, (answers.get("estimated_payment_count") or 0) + 1):
             plan.append(f"estimated_payment.{n}.amount")
+    requested = {canonical_field(f) for f in requested}
+    plan += [f for f in ADDITIONAL_QUESTIONS if f in answers or f in requested]
     plan.append("confirm")
     return plan
 
@@ -202,8 +323,9 @@ def question_plan(answers: dict[str, Any]) -> list[str]:
 def next_question(state: IntakeState) -> str | None:
     """The field to ask about next: a requested re-ask first, then the first unanswered one."""
     answers = state.get("intake_answers") or {}
-    plan = question_plan(answers)
-    for field in state.get("intake_reask") or []:
+    reask = state.get("intake_reask") or []
+    plan = question_plan(answers, reask)
+    for field in reask:
         if field in plan:
             return field
     for field in plan:
@@ -213,6 +335,8 @@ def next_question(state: IntakeState) -> str | None:
 
 
 def field_kind(field: str) -> str:
+    if field in ADDITIONAL_QUESTIONS:
+        return ADDITIONAL_QUESTIONS[field][0]
     if field == "filing_status":
         return "filing_status"
     if field in {
@@ -273,6 +397,8 @@ def question_text(field: str, answers: dict[str, Any]) -> str:
     }
     if field in fixed:
         return fixed[field]
+    if field in ADDITIONAL_QUESTIONS:
+        return ADDITIONAL_QUESTIONS[field][1]
     if field.startswith("dependent."):
         _, n, attr = field.split(".")
         who = _dependent_name(answers, n)
@@ -466,6 +592,16 @@ def parse_amount(text: str) -> str:
     return str(amount)
 
 
+def parse_year(text: str) -> int:
+    years = re.findall(r"\b(1[89]\d\d|20\d\d)\b", text)
+    if len(years) != 1:
+        raise ParseError("Please enter the year with four digits, for example 2024.")
+    year = int(years[0])
+    if not EARLIEST_BIRTH_DATE.year <= year <= TAX_YEAR:
+        raise ParseError(f"Please enter a year between 1900 and {TAX_YEAR}.")
+    return year
+
+
 # Document inventory. Provisional until the scope rules land in data/policy.md (David).
 _COUNT = r"(?:(\d{1,2}|an?|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?"
 IN_SCOPE_DOCUMENTS = {
@@ -545,6 +681,8 @@ def parse_answer(field: str, text: str) -> Any:
         return parse_name(text, what="relationship", max_len=40).lower()
     if kind == "amount":
         return parse_amount(text)
+    if kind == "year":
+        return parse_year(text)
     if kind == "documents":
         return parse_documents(text)
     if kind == "confirm":
@@ -627,7 +765,19 @@ EXPLOITATION_PATTERNS = [
     r"\bchang\w* (my )?(bank|direct deposit)\w*\b.*\b(his|her|their)\b",
 ]
 
+HUMAN_REQUEST_PATTERNS = [
+    r"\b(speak|talk|chat)\w* (to|with) (a |an |someone|somebody|a real |an actual )?"
+    r"(real |actual |live )?(human|person|people|preparer|representative|agent|staff|someone|somebody)\b",
+    r"\b(real|actual|live) (human|person)\b|\bhuman being\b",
+    r"\b(want|need|get|give me|connect me (to|with)) (a |an )?(human|person|representative|operator)\b",
+    r"\bcan (i|we) (speak|talk) to (someone|somebody|anyone)\b",
+]
+
 ESCALATION_NOTICES = {
+    "human_requested": (
+        "Of course. I've asked a Kushim staff member to contact you. Your answers are saved, "
+        "and nothing more will be done on your return until you've spoken with them."
+    ),
     "tax_advice_request": (
         "I'm not able to give tax advice or say which choice is better. I've passed your "
         "question to a Kushim tax preparer, who will follow up with you."
@@ -638,7 +788,8 @@ ESCALATION_NOTICES = {
     ),
     "financial_exploitation": (
         "Thank you for telling me. Your safety matters, and I've asked a Kushim staff member "
-        "to follow up with you privately. If you are in danger right now, call 911. You can "
+        "to follow up with you privately. Your answers are saved, and nothing more will be done "
+        "on your return until they have. If you are in danger right now, call 911. You can "
         "also call the National Elder Fraud Hotline at 1-833-372-8311."
     ),
 }
@@ -649,6 +800,8 @@ def detect_escalations(text: str) -> list[tuple[EscalationType, str]]:
     found: list[tuple[EscalationType, str]] = []
     if any(re.search(p, t) for p in EXPLOITATION_PATTERNS):
         found.append(("financial_exploitation", "possible financial exploitation"))
+    if any(re.search(p, t) for p in HUMAN_REQUEST_PATTERNS):
+        found.append(("human_requested", "taxpayer asked to speak with a person"))
     if any(re.search(p, t) for p in TAX_ADVICE_PATTERNS):
         found.append(("tax_advice_request", "taxpayer asked for tax advice"))
     for pattern, reason in OUT_OF_SCOPE_PATTERNS:
@@ -669,11 +822,44 @@ def make_escalation(
     )
 
 
-def _add_escalation(escalations: list[Escalation], new: Escalation) -> bool:
-    if any(e["type"] == new["type"] and e["reason"] == new["reason"] for e in escalations):
+_REPEAT_SUFFIX = re.compile(r" \(raised again, \d+\)$")
+
+
+def _add_escalation(
+    escalations: list[Escalation], new: Escalation, decided: set[str] | frozenset = frozenset()
+) -> bool:
+    """Add a flag unless the same one is still open.
+
+    ``decided``: ids (``state.intake_escalation_id``) a person has already decided on. If every
+    earlier flag of this kind was decided, the new one is a fresh occurrence: it gets its own
+    reason, and so its own id, so the Orchestrator sends it to a person again instead of
+    treating it as already handled.
+    """
+    same = [
+        e
+        for e in escalations
+        if e["type"] == new["type"] and _REPEAT_SUFFIX.sub("", e["reason"]) == new["reason"]
+    ]
+    if any(intake_escalation_id(e) not in decided for e in same):
         return False
+    if same:
+        new = {**new, "reason": f"{new['reason']} (raised again, {len(same) + 1})"}
     escalations.append(new)
     return True
+
+
+def _decided(state: IntakeState) -> set[str]:
+    return {d.get("escalation_id") for d in state.get("human_decisions") or []}
+
+
+def open_blocking_escalations(state: IntakeState) -> list[Escalation]:
+    """Flags that stop the interview and that no person has decided on yet."""
+    decided = _decided(state)
+    return [
+        e
+        for e in state.get("intake_escalations") or []
+        if e["type"] in BLOCKING_ESCALATIONS and intake_escalation_id(e) not in decided
+    ]
 
 
 _CHILD_WORDS = re.compile(r"\b(son|daughter|child|kid|stepson|stepdaughter|stepchild)\b")
@@ -795,6 +981,8 @@ def _label(field: str) -> str:
     }
     if field in labels:
         return labels[field]
+    if field in ADDITIONAL_QUESTIONS:
+        return ADDITIONAL_QUESTIONS[field][2].lower()
     parts = field.split(".")
     if parts[0] == "dependent":
         return f"dependent {parts[1]}'s {dict(name='name', relationship='relationship', dob='date of birth', ssn='SSN')[parts[2]]}"
@@ -868,6 +1056,9 @@ def summarize_answers(answers: dict[str, Any]) -> str:
             )
     else:
         lines.append("- Estimated payments: none")
+    for f, (_kind, _question, label) in ADDITIONAL_QUESTIONS.items():
+        if f in a:
+            lines.append(f"- {label}: {display_value(f, a[f])}")
     conflicts = find_conflicts(answers)
     if conflicts:
         lines.append("\nPlease double-check: " + "; ".join(reason for reason, _ in conflicts) + ".")
@@ -911,6 +1102,7 @@ def build_record(answers: dict[str, Any]) -> IntakeRecord:
         ]
         if a.get("has_estimated_payments")
         else [],
+        additional_facts={f: a[f] for f in ADDITIONAL_QUESTIONS if f in a},
         confirmed_by_taxpayer=bool(a.get("confirm")),
     )
 
@@ -928,11 +1120,13 @@ def _prune(answers: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in answers.items() if k in plan}
 
 
-def _store(answers, corrections, reask, field, value) -> None:
+def _store(answers, corrections, reask, field, value, requests=None) -> None:
     old = answers.get(field)
     answers[field] = value
     if field in reask:
         reask.remove(field)
+    if requests is not None and field in requests:
+        requests[field] = {**requests[field], "status": "answered"}
     if field != "confirm":
         answers.pop("confirm", None)
         if old is not None and old != value:
@@ -952,6 +1146,8 @@ def process_answer(state: IntakeState, field: str, raw: Any) -> dict[str, Any]:
     corrections = list(state.get("intake_corrections") or [])
     escalations = list(state.get("intake_escalations") or [])
     reask = list(state.get("intake_reask") or [])
+    requests = dict(state.get("intake_requests") or {})
+    decided = _decided(state)
     notices: list[str] = []
 
     def result() -> dict[str, Any]:
@@ -959,7 +1155,8 @@ def process_answer(state: IntakeState, field: str, raw: Any) -> dict[str, Any]:
             "intake_answers": answers,
             "intake_corrections": corrections,
             "intake_escalations": escalations,
-            "intake_reask": [f for f in reask if f in question_plan(answers)],
+            "intake_reask": [f for f in reask if f in question_plan(answers, reask)],
+            "intake_requests": requests,
             "intake_notice": " ".join(notices),
             "intake_transcript": [
                 {
@@ -990,10 +1187,12 @@ def process_answer(state: IntakeState, field: str, raw: Any) -> dict[str, Any]:
     # 2. Escalations: flag for a human, never answer.
     detected = detect_escalations(text)
     for kind, reason in detected:
-        _add_escalation(escalations, make_escalation(kind, reason, field, text))
+        _add_escalation(escalations, make_escalation(kind, reason, field, text), decided)
         notice = ESCALATION_NOTICES[kind].format(reason=reason)
         if notice not in notices:
             notices.append(notice)
+    if any(kind in BLOCKING_ESCALATIONS for kind, _ in detected):
+        return result()  # nothing else from this message is used; the interview stops here
     if any(kind == "tax_advice_request" for kind, _ in detected):
         notices.append("For now, please answer the question as best you can.")
         return result()
@@ -1005,7 +1204,7 @@ def process_answer(state: IntakeState, field: str, raw: Any) -> dict[str, Any]:
         )
         return result()
     if _BACK.match(text):
-        plan = question_plan(answers)
+        plan = question_plan(answers, reask)
         idx = plan.index(field) if field in plan else 0
         if idx == 0:
             notices.append("This is the first question.")
@@ -1028,8 +1227,8 @@ def process_answer(state: IntakeState, field: str, raw: Any) -> dict[str, Any]:
                 notices.append(str(err))
                 reask[:0] = [f for f in fields if f not in reask]
                 return result()
-            _store(answers, corrections, reask, fields[0], value)
-            _flag_documents(fields[0], value, escalations, text)
+            _store(answers, corrections, reask, fields[0], value, requests)
+            _flag_documents(fields[0], value, escalations, text, decided)
             notices.append(f"Updated {_label(fields[0])}.")
             return result()
         reask[:0] = [f for f in fields if f not in reask]
@@ -1059,21 +1258,25 @@ def process_answer(state: IntakeState, field: str, raw: Any) -> dict[str, Any]:
     except ParseError as err:
         notices.append(str(err))
         return result()
-    was_reask = field in reask
-    _store(answers, corrections, reask, field, value)
-    _flag_documents(field, value, escalations, text)
+    was_reask = field in reask and field in answers
+    _store(answers, corrections, reask, field, value, requests)
+    _flag_documents(field, value, escalations, text, decided)
     if was_reask:
         notices.append(f"Updated {_label(field)}.")
     return result()
 
 
-def _flag_documents(field: str, value: Any, escalations: list[Escalation], text: str) -> None:
+def _flag_documents(
+    field: str, value: Any, escalations: list[Escalation], text: str, decided=frozenset()
+) -> None:
     if field != "documents":
         return
     for doc in value:
         if not document_in_scope(doc):
             reason = "an unlisted document" if doc["type"] == "other" else f"a {doc['type']}"
-            _add_escalation(escalations, make_escalation("out_of_scope", reason, field, text))
+            _add_escalation(
+                escalations, make_escalation("out_of_scope", reason, field, text), decided
+            )
 
 
 # --- Graph nodes ---------------------------------------------------------------------------
@@ -1084,31 +1287,105 @@ def _progress(answers: dict[str, Any]) -> dict[str, int]:
     return {"answered": sum(1 for f in plan if f in answers), "total": len(plan)}
 
 
+def _unsupported_reason(field: str) -> str:
+    if field.startswith("document."):
+        return (
+            f"another agent asked for {field}, a value from a tax document; document details "
+            "are entered by hand or read by Document Extraction, not collected by Intake"
+        )
+    if field.startswith("entered_amounts."):
+        return f"another agent asked for {field}, an amount entered directly on a form line"
+    return f"another agent asked for '{field}', which is not a question Intake can ask"
+
+
+def _take_requests(
+    state: IntakeState, answers: dict[str, Any], escalations: list[Escalation]
+) -> tuple[list[str], dict[str, RequestStatus]]:
+    """Sort the fields other agents asked for (``intake_reask``) into the ones to ask now.
+
+    Nothing is dropped silently. A field Intake can't ask raises an ``unsupported_request``
+    flag. A field that keeps coming back after the taxpayer has answered it raises a
+    ``repeated_request`` flag instead of asking again, so a disagreement between agents
+    reaches a person rather than going round in circles. Once a person decides on that flag,
+    the field may be asked once more.
+    """
+    decided = _decided(state)
+    requests = dict(state.get("intake_requests") or {})
+    reask: list[str] = []
+    for field in dict.fromkeys(canonical_field(f) for f in state.get("intake_reask") or []):
+        prev = requests.get(field) or RequestStatus(requested=0, status="answered", cleared=0)
+        # A field still pending from an earlier entry (e.g. the interview was held for a
+        # person) is the same request, not a new one.
+        count = prev["requested"] + (0 if prev["status"] == "pending" else 1)
+        cleared = prev.get("cleared", 0)
+        if field not in question_plan(answers, [field]):
+            reason = _unsupported_reason(field)
+            _add_escalation(
+                escalations, make_escalation("unsupported_request", reason, field), decided
+            )
+            requests[field] = RequestStatus(requested=count, status="unsupported", cleared=cleared)
+            continue
+        if field in answers and count > MAX_REQUESTS_PER_FIELD:
+            reason = f"another agent keeps asking for {_label(field)}, which the taxpayer has answered"
+            flags = [
+                e
+                for e in escalations
+                if e["type"] == "repeated_request" and e["field"] == field
+            ]
+            if flags and len(flags) > cleared and all(
+                intake_escalation_id(e) in decided for e in flags
+            ):
+                count, cleared = 1, len(flags)  # a person has decided: ask once more
+            else:
+                if not any(intake_escalation_id(e) not in decided for e in flags):
+                    _add_escalation(
+                        escalations, make_escalation("repeated_request", reason, field), decided
+                    )
+                requests[field] = RequestStatus(requested=count, status="repeated", cleared=cleared)
+                continue
+        requests[field] = RequestStatus(requested=count, status="pending", cleared=cleared)
+        reask.append(field)
+    return reask, requests
+
+
 def prepare(state: IntakeState) -> dict[str, Any]:
     """Normalize input: on (re-)entry, requested re-asks must be confirmed again."""
     answers = _prune(dict(state.get("intake_answers") or {}))
-    reask = [f for f in state.get("intake_reask") or [] if f in question_plan(answers)]
+    escalations = list(state.get("intake_escalations") or [])
+    reask, requests = _take_requests(state, answers, escalations)
     if reask:
         answers.pop("confirm", None)
     return {
         "intake_answers": answers,
         "intake_reask": reask,
+        "intake_requests": requests,
         "intake_corrections": list(state.get("intake_corrections") or []),
-        "intake_escalations": list(state.get("intake_escalations") or []),
+        "intake_escalations": escalations,
         "intake_notice": state.get("intake_notice") or "",
+        "intake_message": "",
         "intake_status": "in_progress",
         "intake_record": None,
-        "needs_human_review": bool(state.get("intake_escalations")),
+        "needs_human_review": bool(escalations),
     }
 
 
+def question_id(state: IntakeState, field: str) -> str:
+    """Identifies one asking of one question, so a repeated submission can be recognised."""
+    return f"{len(state.get('intake_transcript') or []) // 2 + 1}:{field}"
+
+
 def ask(state: IntakeState) -> dict[str, Any]:
-    """Ask the next question and wait for the answer (one question per super-step)."""
+    """Ask the next question and wait for the answer (one question per super-step).
+
+    Everything before ``interrupt()`` runs again when the node resumes, so it must stay free of
+    side effects: it only reads state. The answer is applied after the interrupt, once.
+    """
     field = next_question(state)
     answers = state.get("intake_answers") or {}
     payload = {
         "type": "intake_question",
         "session_id": state.get("session_id"),
+        "question_id": question_id(state, field),
         "field": field,
         "question": question_text(field, answers),
         "notice": state.get("intake_notice") or "",
@@ -1121,22 +1398,43 @@ def ask(state: IntakeState) -> dict[str, Any]:
     return process_answer(state, field, answer)
 
 
+def hold(state: IntakeState) -> dict[str, Any]:
+    """Stop the interview for a flag a person must see first (exploitation, or the taxpayer
+    asked for a person). Ends this run of Intake without asking anything else, so the
+    Orchestrator sends the session to human review. When a person has decided on the flag,
+    the next run of Intake picks up at the same question."""
+    kinds = dict.fromkeys(e["type"] for e in open_blocking_escalations(state))
+    return {
+        "intake_status": "awaiting_human",
+        "intake_record": None,
+        "intake_message": " ".join(ESCALATION_NOTICES[k] for k in kinds),
+        "intake_notice": "",
+        "needs_human_review": True,
+    }
+
+
 def finalize(state: IntakeState) -> dict[str, Any]:
     answers = state["intake_answers"]
     escalations = list(state.get("intake_escalations") or [])
+    decided = _decided(state)
     for reason, _fields in find_conflicts(answers):
-        _add_escalation(escalations, make_escalation("conflicting_information", reason, None))
+        _add_escalation(
+            escalations, make_escalation("conflicting_information", reason, None), decided
+        )
     record = build_record(answers)
     return {
         "intake_status": "complete",
         "intake_record": record.model_dump(mode="json"),
         "intake_escalations": escalations,
         "intake_notice": "",
+        "intake_message": "",
         "needs_human_review": bool(escalations),
     }
 
 
 def _route(state: IntakeState) -> str:
+    if open_blocking_escalations(state):
+        return "intake_hold"
     return "intake_ask" if next_question(state) else "intake_finalize"
 
 
@@ -1149,10 +1447,13 @@ def build_intake_graph(checkpointer: Any = None):
     builder = StateGraph(IntakeState, input_schema=IntakeInput, output_schema=IntakeOutput)
     builder.add_node("intake_prepare", prepare)
     builder.add_node("intake_ask", ask)
+    builder.add_node("intake_hold", hold)
     builder.add_node("intake_finalize", finalize)
     builder.add_edge(START, "intake_prepare")
-    builder.add_conditional_edges("intake_prepare", _route, ["intake_ask", "intake_finalize"])
-    builder.add_conditional_edges("intake_ask", _route, ["intake_ask", "intake_finalize"])
+    nexts = ["intake_ask", "intake_hold", "intake_finalize"]
+    builder.add_conditional_edges("intake_prepare", _route, nexts)
+    builder.add_conditional_edges("intake_ask", _route, nexts)
+    builder.add_edge("intake_hold", END)
     builder.add_edge("intake_finalize", END)
     return builder.compile(checkpointer=checkpointer, name="intake")
 
@@ -1172,10 +1473,12 @@ def _turn(graph, session_id: str, *, resumed: bool = False) -> dict[str, Any]:
             )
             turn["notice"] = " ".join(x for x in (welcome, turn.get("notice")) if x)
         return turn
+    output = {k: snap.values.get(k) for k in OUTPUT_KEYS}
     return {
-        "status": "complete",
+        # "awaiting_human": the interview stopped until a person decides on a flag.
+        "status": "awaiting_human" if output["intake_status"] == "awaiting_human" else "complete",
         "session_id": session_id,
-        "output": {k: snap.values.get(k) for k in OUTPUT_KEYS},
+        "output": output,
     }
 
 
@@ -1195,10 +1498,21 @@ def start_or_resume(graph, session_id: str, initial: IntakeInput | None = None) 
     return _turn(graph, session_id)
 
 
-def submit_answer(graph, session_id: str, answer: str) -> dict[str, Any]:
-    """Send the taxpayer's answer to the waiting question; returns the next question or the output."""
-    if not load_session(graph, session_id).pending:
+def submit_answer(
+    graph, session_id: str, answer: str, question_id: str | None = None
+) -> dict[str, Any]:
+    """Send the taxpayer's answer to the waiting question; returns the next question or the output.
+
+    Pass the ``question_id`` the answer was given to. If the session has moved on (the same
+    answer was sent twice, for example by a double click or a retried request), the answer is
+    not applied to the next question: the current question comes back with status
+    ``"stale_answer"``.
+    """
+    snap = load_session(graph, session_id)
+    if not snap.pending:
         raise RuntimeError(f"session {session_id!r} is not waiting for an answer")
+    if question_id is not None and snap.pending[0].get("question_id") != question_id:
+        return {**_turn(graph, session_id), "status": "stale_answer"}
     graph.invoke(Command(resume=answer), session_config(session_id))
     return _turn(graph, session_id)
 
@@ -1236,9 +1550,12 @@ def main(argv: list[str] | None = None) -> None:
                 f"\nYour answers are saved. Resume with: python run.py intake --session {args.session}"
             )
             return
-        turn = submit_answer(graph, args.session, answer)
+        turn = submit_answer(graph, args.session, answer, turn.get("question_id"))
 
     out = turn["output"]
+    if turn["status"] == "awaiting_human":
+        print(f"\nSilverFile: {out['intake_message']}")
+        return
     print("\nThank you! Your intake is complete.")
     if out["needs_human_review"]:
         print("A Kushim preparer will follow up about:")
