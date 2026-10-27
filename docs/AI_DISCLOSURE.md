@@ -128,3 +128,14 @@ paragraph.
   - Ran the 27 extraction tests and ran the offline demo to
     confirm the output, provenance records, SSN masking and escalations.
   - Committed the work on a branch, pushed it and opened the pull request.
+ 
+## Review / Audit Agent (Marco)
+
+**Tools:** Claude (Anthropic) via the claude.ai chat interface and the Claude add-in in VS Code.
+
+
+- **Design (chat):** I shared the assignment brief and our team repository, and Claude helped design the agent's 12 checks, its approved/revise/escalate verdicts, what it returns to the orchestrator, and the loop controls (a three-review limit and a guard that stops a revision that changes nothing).
+- **Code and tests (chat):** Claude drafted the agent package and tests, and ran them in its own environment using a stand-in for pytest.
+- **Implementation (VS Code add-in):** I used the add-in to create the agent components in our repo, write the full programming, run and debug the tests. After individual review of all files and minor changes, I used Claude to make the GitHub commits.
+- **Documentation (chat):** Claude drafted our `IMPLEMENTATION_NOTES.md` section, the agent description, and a file summary table.
+- **Troubleshooting (chat):** Claude helped me switch the add-in from API credits to my Pro subscription.
