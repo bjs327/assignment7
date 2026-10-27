@@ -8,7 +8,9 @@ applies in the main graph.
 
 Who writes what
 ---------------
-- Intake: session_id, intake_* keys, needs_human_review
+- Intake: session_id, intake_* keys (including intake_requests, its record of every field
+  another agent asked for, and intake_message, what the taxpayer was told when the interview
+  stopped for a person), needs_human_review
 - Document Extraction: extracted_documents, extraction_complete, escalations, trace
 - Eligibility & Rules: eligibility, eligibility_attempt, eligibility_reask, eligibility_notice,
   escalations, trace
@@ -114,13 +116,18 @@ class SilverFileState(TypedDict, total=False):
     session_id: str
 
     # Intake
-    intake_status: Literal["in_progress", "complete"]
+    # "awaiting_human": the interview stopped for a flag a person must decide on first.
+    intake_status: Literal["in_progress", "complete", "awaiting_human"]
     intake_record: dict[str, Any] | None
     intake_answers: dict[str, Any]
     intake_corrections: list[dict[str, Any]]
     intake_escalations: list[dict[str, Any]]
     intake_reask: list[str]
     intake_notice: str
+    # Declared here so they survive the Intake subgraph's return: LangGraph drops output keys
+    # the parent state doesn't declare.
+    intake_requests: dict[str, dict[str, Any]]  # field -> {requested, status, cleared}
+    intake_message: str
     needs_human_review: bool
 
     # Documents
