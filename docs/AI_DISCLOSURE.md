@@ -100,3 +100,31 @@ paragraph.
 - **Integration:** Claude helped identify shared-state issues between Intake, Eligibility, Computation, and the Orchestrator. Additional changes were made to improve communication and prevent infinite loops.
 
 - **Jordan's Contributions:** I reviewed the assignment requirements, guided the implementation, configured LangGraph, tested the agent independently, verified session persistence, managed GitHub contributions, and coordinated integration improvements with teammates.
+### Document Extraction and Security (Yassine)
+
+- **Tool:** Claude in the Claude app and VSCode, with the Claude Opus 5.5 model.
+
+- **Building:**
+  - Claude assisted in writing  the Document Extraction agent code for (`src/agents/extraction/`): the W-2 schemas, the
+    vision-model reader, the validation checks, and the LangGraph fan-out, reducer and
+    aggregation step.
+  - Claude wrote the SSN security module (`src/security/ssn.py`): the 900 to 999 allow-list,
+    masking and redaction.
+  - Claude wrote the fake W-2 image generator (`data/generate_fixtures.py`) and the demo and
+    test images, including a non-test SSN, a prior-year W-2 and a prompt-injection test.
+  - Claude wrote 27 tests. Claude's workspace couldn't install LangGraph, so it first checked the
+    graph logic against a small stand-in that mimics LangGraph's parallel steps, shuffling write
+    order to test the reducer. That run caught two mistakes in the tests' own checks, which
+    Claude fixed.
+  - Claude wrote the Document Extraction and Security sections of
+    `docs/IMPLEMENTATION_NOTES.md` and updated the README.
+     **Yassine's own role:**
+  - Reviewed assignment instruction and rubric and created a plan for document extraction agent creation.    
+  - Reviewed the design and the code's behaviour with Claude's explanations, and decided the
+    agent should flag doubtful values for a person rather than correct them.
+  - Set up the project locally (Python 3.13, virtual environment, dependencies). Fixed install
+    problems with Claude's help: the default macOS Python was too old, Python 3.15 was too new,
+    and the `cryptography` package needed a prebuilt version.
+  - Ran the 27 extraction tests and ran the offline demo to
+    confirm the output, provenance records, SSN masking and escalations.
+  - Committed the work on a branch, pushed it and opened the pull request.
