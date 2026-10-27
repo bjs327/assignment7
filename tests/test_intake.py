@@ -425,6 +425,12 @@ def test_conflicting_information_is_flagged_at_the_end(graph):
         ("Should I itemize?", "tax_advice_request"),
         ("how much will I owe?", "tax_advice_request"),
         ("can I deduct my medical bills", "tax_advice_request"),
+        # The three examples in specification section 2.
+        ("Should I convert my IRA to a Roth?", "tax_advice_request"),
+        ("Would I pay less if we filed separately?", "tax_advice_request"),
+        ("Can I deduct my medications?", "tax_advice_request"),
+        ("would it be better to file jointly", "tax_advice_request"),
+        ("is it better to take the lump sum", "tax_advice_request"),
         ("I sold my house this year", "out_of_scope"),
         ("I'm self-employed", "out_of_scope"),
         ("my husband passed away in March", "out_of_scope"),
@@ -441,7 +447,8 @@ def test_detect_escalations(text, kind):
 
 
 @pytest.mark.parametrize(
-    "text", ["yes", "no", "single", "03/14/1955", "I have high blood pressure", "two W-2s"]
+    "text", ["yes", "no", "single", "03/14/1955", "I have high blood pressure", "two W-2s",
+             "I have a 1099-R from my Roth IRA"]
 )
 def test_ordinary_answers_are_not_escalated(text):
     assert detect_escalations(text) == []
@@ -491,6 +498,12 @@ def test_parse_yes_no(text, expected):
 def test_parse_yes_no_rejects_unclear_answers(text):
     with pytest.raises(ParseError):
         parse_yes_no(text)
+
+
+def test_not_sure_offers_a_person():
+    """Honest uncertainty (specification section 4.3): flagging for a volunteer is reachable."""
+    with pytest.raises(ParseError, match="talk to a person"):
+        parse_yes_no("I'm not sure")
 
 
 @pytest.mark.parametrize(

@@ -466,7 +466,8 @@ def parse_yes_no(text: str) -> bool:
     if _UNSURE.search(t):
         raise ParseError(
             "That's okay. If you need to check, type 'pause' and come back later; your answers "
-            "are saved. Otherwise, please answer yes or no."
+            "are saved. If you'd like help, say 'talk to a person' and I'll flag this for a "
+            "Kushim volunteer. Otherwise, please answer yes or no."
         )
     words = re.findall(r"[a-z']+", t)
     if words and words[0] in _YES_FIRST:
@@ -483,6 +484,25 @@ def parse_yes_no(text: str) -> bool:
 def is_test_ssn(area: str, group: str, serial: str) -> bool:
     """Only SilverFile's test range: area 900-999, and never an all-zero group or serial."""
     return area.startswith("9") and group != "00" and serial != "0000"
+
+
+def ssn_refusal(text: str) -> str | None:
+    """The notice for an answer containing a number that looks like an SSN outside the test
+    range, or None if there is none.
+
+    Drivers call this before handing an answer to the graph. LangGraph saves every resume value
+    in the checkpoint before any node runs, so an answer refused only inside the graph would
+    already be stored, in the SQLite file, despite the taxpayer being told it wasn't.
+    """
+    for area, group, serial in SSN_LIKE.findall(text or ""):
+        if not is_test_ssn(area, group, serial):
+            if area.startswith("9"):
+                return f"That number isn't a properly formatted test SSN. {TEST_SSN_HINT}"
+            return (
+                "For your protection, SilverFile can't accept a real Social Security number, "
+                f"and I haven't saved it. {TEST_SSN_HINT}"
+            )
+    return None
 
 
 def parse_ssn(text: str) -> str:
@@ -704,6 +724,11 @@ TAX_ADVICE_PATTERNS = [
     r"\b(will|would) (i|we) (get|owe) (a )?(refund|money)\b",
     r"\bis (this|that|it|my \w+) (taxable|deductible)\b",
     r"\bdo (i|we) (have|need) to (file|pay|report)\b",
+    # The specification's own examples (section 2) and planning questions like them.
+    r"\bshould (i|we) (convert|roll ?over|withdraw|cash|sell|buy|invest|contribute|move|start|delay|wait|open)\b",
+    r"\b(convert|conversion)\b.*\broth\b",
+    r"\b(would|will|do|does|could) (i|we) (pay|owe) (any )?(less|more)\b",
+    r"\b(is|would) it (be )?(better|best|cheaper|smarter|worth it)\b",
 ]
 
 OUT_OF_SCOPE_PATTERNS = [
@@ -1046,7 +1071,7 @@ def summarize_answers(answers: dict[str, Any]) -> str:
                 f"{display_value(f'dependent.{n}.ssn', a.get(f'dependent.{n}.ssn'))}"
             )
     else:
-        lines.append("- Dependents: none")
+        lines.append("- Dependents: " + ("none" if "has_dependents" in a else "(not answered)"))
     lines.append(f"- Documents: {display_value('documents', a.get('documents'))}")
     if a.get("has_estimated_payments"):
         lines.append("- Estimated payments:")
@@ -1055,7 +1080,9 @@ def summarize_answers(answers: dict[str, Any]) -> str:
                 f"  {n}. {display_value(f'estimated_payment.{n}.amount', a.get(f'estimated_payment.{n}.amount'))}"
             )
     else:
-        lines.append("- Estimated payments: none")
+        lines.append(
+            "- Estimated payments: " + ("none" if "has_estimated_payments" in a else "(not answered)")
+        )
     for f, (_kind, _question, label) in ADDITIONAL_QUESTIONS.items():
         if f in a:
             lines.append(f"- {label}: {display_value(f, a[f])}")
@@ -1172,17 +1199,11 @@ def process_answer(state: IntakeState, field: str, raw: Any) -> dict[str, Any]:
         notices.append("I didn't catch that.")
         return result()
 
-    # 1. SSN guard: never accept or keep a real-looking SSN.
-    for area, group, serial in SSN_LIKE.findall(text):
-        if not is_test_ssn(area, group, serial):
-            if area.startswith("9"):
-                notices.append(f"That number isn't a properly formatted test SSN. {TEST_SSN_HINT}")
-            else:
-                notices.append(
-                    "For your protection, SilverFile can't accept a real Social Security number, "
-                    f"and I haven't saved it. {TEST_SSN_HINT}"
-                )
-            return result()
+    # 1. SSN guard: never accept or keep a real-looking SSN. The session drivers already refuse
+    #    these before they reach the graph (see ssn_refusal); this is the second line.
+    if refusal := ssn_refusal(text):
+        notices.append(refusal)
+        return result()
 
     # 2. Escalations: flag for a human, never answer.
     detected = detect_escalations(text)
@@ -1282,8 +1303,10 @@ def _flag_documents(
 # --- Graph nodes ---------------------------------------------------------------------------
 
 
-def _progress(answers: dict[str, Any]) -> dict[str, int]:
-    plan = [f for f in question_plan(answers) if f != "confirm"]
+def _progress(answers: dict[str, Any], requested: Any = ()) -> dict[str, int]:
+    # Questions other agents asked for count too, so the taxpayer never sees "13 of 13" while
+    # a 14th question is being asked.
+    plan = [f for f in question_plan(answers, requested) if f != "confirm"]
     return {"answered": sum(1 for f in plan if f in answers), "total": len(plan)}
 
 
@@ -1392,7 +1415,7 @@ def ask(state: IntakeState) -> dict[str, Any]:
         "current_answer": display_value(field, answers[field])
         if field in answers and field != "confirm"
         else None,
-        "progress": _progress(answers),
+        "progress": _progress(answers, state.get("intake_reask") or []),
     }
     answer = interrupt(payload)
     return process_answer(state, field, answer)
@@ -1513,6 +1536,8 @@ def submit_answer(
         raise RuntimeError(f"session {session_id!r} is not waiting for an answer")
     if question_id is not None and snap.pending[0].get("question_id") != question_id:
         return {**_turn(graph, session_id), "status": "stale_answer"}
+    if refusal := ssn_refusal("" if answer is None else str(answer)):
+        return {**_turn(graph, session_id), "notice": refusal}  # never handed to the graph
     graph.invoke(Command(resume=answer), session_config(session_id))
     return _turn(graph, session_id)
 
