@@ -139,3 +139,52 @@ paragraph.
 - **Implementation:** I used the add-in to create the agent components in our repo, write the full programming, run and debug the tests. After individual review of all files and minor changes, I used Claude to make the GitHub commits.
 - **Documentation:** Claude drafted our `IMPLEMENTATION_NOTES.md` section, the agent description, and a file summary table.
 - **Troubleshooting:** Claude helped me switch the add-in from API credits to my Pro subscription.
+
+### Orchestrator, shared state and task division and management (Verena)
+
+These notes were drafted by the AI from the working session; Verena reviewed and approved them
+before they were added.
+
+- **Tool:** Claude Code in the VS Code extension, with the Claude Opus 5.5 model, used as a pair
+  programmer under ground rules Verena set at the start: read-only access to the repository,
+  every proposed change shown in the chat first, and nothing written until she approved it.
+- **Analysis:**
+  - Claude read every agent's code and reported how each one signals that a human is needed,
+    where information reaches another agent without going through the orchestrator, and which
+    state keys nobody writes yet.
+  - It found that Intake drops the questions Eligibility asks it (so the two would loop
+    forever) and that nobody yet collects the 1099 and SSA-1099 amounts or the document files.
+    Verena forwarded these to Jordan and asked for an orchestrator that works either way.
+- **Building:** Claude wrote all of the code, tests and documentation for this part:
+  `src/state.py`, `src/agents/orchestrator/` (routing, task ledger, stale marking, loop guard,
+  finalize and the human review step), `src/graph.py`, the `review` command in `run.py`, 59
+  tests (`test_merge_order.py`, `test_decision_table.py`, `tests/orchestrator/`) and the
+  Orchestrator section of `docs/IMPLEMENTATION_NOTES.md`. Verena did not write code herself.
+- **Testing:**
+  - Claude ran the tests in a temporary copy of the repository outside the project folder, which
+    Verena asked to have deleted afterwards. The other agents' 669 tests passed with the new
+    files in place.
+  - The first full-graph run failed: two agents declare their own reducer for `escalations`,
+    which LangGraph rejects. Claude fixed it in `graph.py` without changing their code; the 59
+    orchestrator tests then passed.
+  - When Verena asked for a re-check against the assignment, Claude found that the loop guard ran
+    before the approval check and fixed it. Four test failures were mistakes in Claude's own
+    tests, which it fixed.
+- **Verena's own role:**
+  - Proposed the task ledger (her focus area); Claude designed and wrote it. Brought in the
+    team's hub-and-spoke decision and took on `src/state.py`.
+  - Shaped the human review step: asked for a readable review packet instead of raw data, then
+    decided not to save it as a file; challenged a vague "continue" option, which Claude replaced
+    with issue-specific options that she approved; required a written reason before "safe to
+    continue" on possible exploitation; chose to let a person, not the system, judge that case;
+    and moved the review step into the orchestrator so it isn't an agent.
+  - Asked Claude to check the work against the assignment, questioned the SSN masking, and chose
+    to drop it and a "not for filing" stamp, since neither was required.
+  - Required that only files she owns be edited, approved or rejected every change in VS Code,
+    rejected several and asked for changes (shorter notes, test descriptions, per-file edits).
+  - Asked Claude to verify the commit description against the original placeholders before
+    committing; Claude ran the commit after her approval. Verena forked the repository after the
+    direct push was refused, ran the push herself and opened pull request #5.
+- **Checking AI Work**
+  - Before accepting any of the proposals for code addition (or before running any commands I didn't understand), I took the output from claude code and gave it to another distinct agent to explain and challenge what it was doing and whether that is what I asked for. 
+  - I also made sure the code was tested in context of everything that exists and challenged the AI when it seemed to stray from the assignment requirements I provided in regards to actual implementation.
