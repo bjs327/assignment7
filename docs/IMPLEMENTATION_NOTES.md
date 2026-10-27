@@ -8,6 +8,7 @@ One section per component and per focus area, each written by its owner.
 - [Eligibility & Rules](#eligibility--rules-david)
 - [Computation and the tax_math MCP server](#computation-and-the-tax_math-mcp-server-brendan)
 - [Review / Audit](#review--audit-marco)
+- [Document registration, session runner, draft form and dashboard](#document-registration-session-runner-draft-form-and-dashboard-unassigned)
 - Focus areas: [Inter-agent communication](#inter-agent-communication-brendan), [Security](#security-yassine)
 
 ## Orchestrator (Verena)
@@ -113,7 +114,86 @@ python run.py review --session SESSION_ID    # review a session paused for a pre
 
 ## Intake (Jordan)
 
-TODO
+The only agent that talks to the taxpayer. It records filing status, date of birth, blindness,
+dependents, the document inventory and estimated payments, plus any extra fact another agent asks
+for. It never adds, computes an age or decides eligibility: payments are kept one by one for
+Computation to total, dates of birth are passed on as dates for Eligibility & Rules.
+
+Code: `src/agents/intake.py`. Tests: `tests/test_intake.py`, `tests/test_intake_integration.py`
+(full graph), `tests/test_memory.py`.
+
+### How it works
+
+A small LangGraph graph (`prepare → ask ⟲ → finalize | hold`) run as a subgraph of the main graph.
+Each question is one `interrupt()`; the answer comes back with `Command(resume=...)` and is
+applied once, after the interrupt, so resuming never applies it twice. `question_plan` derives the
+questions from the answers so far, so correcting an earlier answer adds or removes the questions
+that depend on it (spouse questions only for married statuses; one block per dependent).
+
+### Requests from other agents
+
+Eligibility & Rules (`eligibility_reask`), Computation (`computation_missing`) and a preparer
+(`re_ask`) ask for fields through the Orchestrator, which hands them to Intake as `intake_reask`.
+Nothing is dropped silently: a field on Intake's plan is asked again; one of the
+`ADDITIONAL_QUESTIONS` (Eligibility's facts) is added to the plan and its answer stored in
+`intake_answers` under the requested name, which is where Eligibility reads it; anything Intake
+can't ask (for example a document box) raises an `unsupported_request` flag; a field asked for
+more than three times after being answered raises `repeated_request`. `intake_requests` records
+what happened to each request.
+
+### Accessibility and dignity (specification section 4.3)
+
+- **One question at a time.** Every question is its own interrupt and asks one thing; yes/no
+  questions say "(yes/no)", dates give an example format.
+- **Plain language.** "Husband or wife" rather than "spouse" in the questions Eligibility needs;
+  no tax terms such as MAGI ever reach the taxpayer; notices explain why a question is asked
+  ("I need 4 more answers to check which parts of the form apply to you").
+- **Tolerance of repetition and drift.** "go back", "change my date of birth", "change filing
+  status to single" all work at any question, and re-answering is a correction, never a loss:
+  every change is kept in `intake_corrections` (SSNs masked). A final summary asks for
+  confirmation, and any change re-asks for it. Contradictions between answers (for example the
+  same SSN twice) are flagged, not resolved by Intake.
+- **No unnecessary PII.** SSNs are asked only for the people on the return. Only the 900-999 test
+  range is accepted. A number that looks like a real SSN is refused **before it reaches the
+  graph** (`ssn_refusal`, called by every driver), because LangGraph saves resume values in the
+  checkpoint; the taxpayer is told it wasn't saved, and that is now true. An SSN volunteered in
+  any other answer is redacted from the transcript; summaries and the resume message mask SSNs;
+  session IDs may not contain one.
+- **Resumability.** Every step is checkpointed in SQLite under the session ID. Returning shows
+  "Welcome back! You've answered N of M questions" and a summary of what was covered, then
+  continues at the same question (`app.session.welcome_back`; tested across a new process).
+- **Honest uncertainty.** "I'm not sure" is accepted as an answer to the moment: the taxpayer is
+  told they can pause and check, or say "talk to a person" to be flagged for a Kushim volunteer.
+  Asking for a person, at any question, stops the interview until a preparer has decided.
+
+### Escalations it raises
+
+Tax-advice requests (including the specification's own examples), out-of-scope situations and
+documents, contradictions, financial exploitation or third-party pressure, and a request for a
+person. Advice and out-of-scope flags are noted and the interview continues; exploitation and a
+request for a person stop the interview at once (`intake_status = "awaiting_human"`) and nothing
+else from that message is used. Intake never decides that an exploitation concern is resolved:
+only a preparer's "Checked: safe to continue", with a required note, lets it go on.
+
+## Document registration, session runner, draft form and dashboard (unassigned)
+
+Not agents: the parts people use directly. Written during integration (see
+`docs/INTEGRATION_CHANGELOG.md`). Code: `src/app/`. Tests: `tests/app/`.
+
+- **`documents.py`, the upload interface.** Registers W-2 images (JPG, PNG, WEBP; unique ID;
+  saved under a name SilverFile chooses; SHA-256; duplicates refused) into `documents` for
+  Extraction, and typed-in SSA-1099, 1099-INT, 1099-DIV and 1099-R boxes and Schedule 1-3 lines
+  into `entered_documents` and `entered_amounts`, each recording who entered it and when (spec
+  4.2 "direct user input"). It checks the format of amounts, never their meaning.
+- **`session.py`.** One driver for the terminal and the dashboard: start, answer (with the
+  question ID, so a repeated submission is ignored; real SSNs refused before the graph), status
+  read from the checkpoint, welcome-back summary.
+- **`form1040sr.py`.** The draft Form 1040-SR from `final_package`: every amount clickable to
+  show the tax_math tool, its inputs, the working, the source documents and the rule citations.
+  Presentation only.
+- **`dashboard.py`.** Streamlit, `python run.py dashboard`. Taxpayer view and Kushim preparer
+  view (sessions, review decisions through the Orchestrator's `submit_decisions`, draft form,
+  audit record). No login yet.
 
 ## Document Extraction (Yassine)
 

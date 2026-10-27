@@ -1,0 +1,11 @@
+{
+  "entered_by": "taxpayer",
+  "documents": [
+    {"document_type": "SSA-1099", "recipient": "taxpayer", "boxes": {"5": "24000.00"}},
+    {"document_type": "SSA-1099", "recipient": "spouse", "boxes": {"5": "16000.00"}},
+    {"document_type": "1099-INT", "recipient": "taxpayer", "boxes": {"1": "1200.00", "8": "300.00"}},
+    {"document_type": "1099-R", "recipient": "taxpayer",
+     "boxes": {"1": "40000.00", "2a": "40000.00", "4": "4000.00", "7": "7", "ira_sep_simple": true}}
+  ],
+  "amounts": {}
+}

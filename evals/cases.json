@@ -1,4 +1,45 @@
 {
-  "description": "Eval cases for the full system (specification section 5.2). TODO.",
-  "cases": []
+  "description": "Eval cases for the full system (specification section 5.2). Each is run end to end by tests/app/test_eval_cases.py and tests/app/test_dashboard.py; step-by-step instructions are in demo/.",
+  "cases": [
+    {
+      "id": "eval_case_1",
+      "title": "Clean run: married filing jointly, both 65+, one W-2 image, four typed-in forms",
+      "instructions": "demo/eval_case_1.md",
+      "inputs": {
+        "w2_images": ["demo/w2_image_1.jpg"],
+        "forms": "demo/eval_case_1_forms.json",
+        "answers": "demo/eval_case_1_answers.txt"
+      },
+      "command": "python run.py session --session eval1 --w2 demo/w2_image_1.jpg --forms demo/eval_case_1_forms.json --offline --answers demo/eval_case_1_answers.txt",
+      "expected": {
+        "run_status": "approved",
+        "human_review": false,
+        "lines": {
+          "1z": 18500, "2a": 300, "2b": 1200, "3a": 0, "3b": 0, "4a": 40000, "4b": 40000, "5a": 0, "5b": 0,
+          "6a": 40000, "6b": 34000, "9": 93700, "11a": 93700, "12e": 34700, "13b": 12000, "14": 46700,
+          "15": 47000, "16": 5163, "24": 5163, "25a": 1850, "25b": 4000, "25c": 0, "25d": 5850, "26": 2000,
+          "33": 7850, "34": 2687, "37": 0
+        }
+      }
+    },
+    {
+      "id": "eval_case_2",
+      "title": "Human in the loop: spouse died during 2025 (filing-status ambiguity, spec 4.4 condition 5)",
+      "instructions": "demo/eval_case_2.md",
+      "inputs": {
+        "w2_images": ["demo/w2_image_1.jpg"],
+        "forms": "demo/eval_case_1_forms.json",
+        "answers": "demo/eval_case_2_answers.txt"
+      },
+      "command": "python run.py session --session eval2 --w2 demo/w2_image_1.jpg --forms demo/eval_case_1_forms.json --offline --answers demo/eval_case_2_answers.txt",
+      "expected": {
+        "pauses_for": "Filing status unclear",
+        "options": ["choose_filing_status", "re_ask", "stop"],
+        "rules_cited": ["FS-02", "FS-06", "ESC-05"],
+        "resolution": {"decision": "choose_filing_status", "filing_status": "married_filing_jointly"},
+        "after_resolution": {"run_status": "approved", "lines": {"12e": 34700}},
+        "if_stopped": {"run_status": "handed_to_preparer", "draft_return": null}
+      }
+    }
+  ]
 }
