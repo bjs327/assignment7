@@ -76,8 +76,14 @@ config reports style-only findings across the codebase (including the new files)
   `intake → extraction → eligibility_rules → intake → extraction → eligibility_rules →
   computation → review → finalize`, `approved`, draft HTML written. Every line equals the
   hand-worked values in `demo/eval_case_1.md` (0 mismatches).
-- **Not verified:** reading a W-2 image with the vision model (no API key available). The live
-  path is the existing Extraction code; only the offline reader was exercised.
+- **Live vision model (2026-10-27 01:27 MST, after an API key was added to `.env`):**
+  `python run.py extract demo/w2_image_1.jpg` read all six boxes exactly (box 1 18,500.00, box 2
+  1,850.00, ...; method `vision-llm:claude-sonnet-5-5`). Then `python run.py session --session
+  eval1_live --w2 demo/w2_image_1.jpg --forms demo/eval_case_1_forms.json --answers
+  demo/eval_case_1_answers.txt` (no `--offline`) ended `approved`, same route, every line equal to
+  the hand-worked values, line 1z's provenance naming the vision model. `python-dotenv` had to be
+  installed first (in requirements.txt but missing from the venv). A W-2 the system hasn't seen
+  before (as a grader would use) was not tried.
 
 ## 10. Evaluation case 2: human in the loop
 
@@ -112,7 +118,7 @@ config reports style-only findings across the codebase (including the new files)
 
 ## 13. Known limitations
 
-- Vision-model W-2 reading not tested here (no API key).
+- Vision-model W-2 reading tested only on `demo/w2_image_1.jpg`, not on an unseen W-2.
 - `docs/metrics.md` (spec 4.5 context-window measurements, `--no-context-strategy` batch) not done.
 - `docs/graph.png` and the demo video not produced (Mermaid diagram is in the README).
 - Dashboard has no authentication.

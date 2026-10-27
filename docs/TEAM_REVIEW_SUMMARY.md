@@ -44,8 +44,8 @@ Jordan yet.
 
 ## Partially done / blocked
 
-- **Vision-model W-2 reading:** not verified (no API key on this machine). Needs one run with
-  `ANTHROPIC_API_KEY` on `demo/w2_image_1.jpg` and a made-up W-2 (rubric D).
+- **Vision-model W-2 reading:** verified on `demo/w2_image_1.jpg` (eval case 1 approved, all lines
+  correct). Still to try: a made-up W-2 the system hasn't seen (rubric D).
 - **`docs/metrics.md` (spec 4.5):** the 10-item batch with `--no-context-strategy` and per-item
   token counts is not implemented. Agent memory has no assigned owner in the README.
 - **`docs/graph.png`, demo video:** not produced.
@@ -74,4 +74,5 @@ Jordan yet.
 - [ ] Brendan: typed-in form boxes match Computation's `BOX_LINES` / `REQUIRED_BOXES`
 - [ ] Team: owner for `src/app/`; README status rows
 - [ ] Jordan: Intake changes; then commit, push and open a PR (not done; awaiting approval)
-- [ ] Someone with an API key: eval case 1 with the vision model
+- [x] Eval case 1 with the vision model (demo W-2)
+- [ ] A made-up W-2 with the vision model
