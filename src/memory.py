@@ -20,6 +20,7 @@ transcript has Social Security numbers redacted.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -30,7 +31,11 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 
 # Default location for durable sessions. Kept out of git by the *.sqlite rule in .gitignore.
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "sessions.sqlite"
+# SILVERFILE_DB overrides it (the Docker image sets it so sessions live on a volume).
+DEFAULT_DB_PATH = Path(
+    os.environ.get("SILVERFILE_DB")
+    or Path(__file__).resolve().parent.parent / "data" / "sessions.sqlite"
+)
 
 # Any nine digits written like an SSN: 123-45-6789, 123 45 6789 or 123456789.
 # Not part of a longer number, an amount or a decimal, but sentence punctuation is fine.
