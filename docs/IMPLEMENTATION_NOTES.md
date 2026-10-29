@@ -306,8 +306,8 @@ without adding anything the table can't do.
 |---|---|---|
 | Can the taxpayer use Form 1040-SR? (either spouse on a joint return) | ELIG-01 | `form_1040sr_eligible`; escalates if not |
 | Is the chosen filing status supported? | FS-01 to FS-06 | `filing_status`; escalates when ambiguous, and always when a spouse died in 2025 |
-| The four line 12d boxes, including the spouse-box conditions on a separate return | ELIG-02 | `line_12d` |
-| Who qualifies for the senior deduction (no one on married filing separately) | ELIG-03 | `senior_deduction` |
+| The four line 12d boxes, including the spouse-box conditions on a separate return, and a spouse who died in 2025 before reaching 65 | ELIG-02 | `line_12d` |
+| Who qualifies for the senior deduction (no one on married filing separately; not a spouse who died before reaching 65) | ELIG-03 | `senior_deduction` |
 | Does the Standard Deduction Chart apply? | ELIG-04 | escalates if claimable as a dependent, spouse itemizes on a separate return, or dual-status alien |
 | Is each document in scope, and which lines does it feed? | SCOPE-01 to SCOPE-05 | `documents` (e.g. IRA 1099-R to lines 4a and 4b, QCD flag) |
 | Which schedules apply | SCH-01 | `schedules` (Schedule B waits for Computation's lines 2b and 3b) |
@@ -342,6 +342,7 @@ Intake's record doesn't yet cover everything the rules need. These are requested
 | Field | When asked |
 |---|---|
 | `spouse_died_in_2025` | Every status except qualifying surviving spouse |
+| `spouse_date_of_death` | The spouse died in 2025 and turned 65 during 2025 (born January 2, 1960 to January 1, 1961), the only case where the date decides the age box and senior deduction. Asked before the filing-status escalation, so the taxpayer answers in one sitting and the preparer sees it. Asked again, with `spouse_died_in_2025`, if the date isn't in 2025. |
 | `can_be_claimed_as_dependent`, `dual_status_alien` | Always |
 | `spouse_can_be_claimed_as_dependent` | Joint return, or a separate return where a spouse box might apply |
 | `spouse_itemizes` | Married filing separately |
@@ -374,6 +375,9 @@ python run.py eligibility data/fixtures/eligibility_spouse_died.json --resolve m
 - Taxpayer vs document conflicts are checked on identifiers (SSN, recipient, counts, age), not
   on amounts. Comparing amounts is Review's job.
 - A deceased taxpayer (as opposed to a deceased spouse) isn't handled specially.
+- Form 1040-SR eligibility (ELIG-01) goes by date of birth alone, as the specification states,
+  even for a spouse who died before reaching 65. Only the age box and the senior deduction use
+  the age at death.
 
 ## Computation and the tax_math MCP server (Brendan)
 

@@ -9,11 +9,18 @@ and `tests/app/test_dashboard.py::test_a_preparer_resolves_eval_case_2_in_the_da
 
 The same W-2 image and typed-in forms as case 1 (`demo/w2_image_1.jpg`,
 `demo/eval_case_1_forms.json`). The answers are in `demo/eval_case_2_answers.txt`: identical to
-case 1 except question 15:
+case 1 except question 15, plus two more at the end:
 
 | # | Question | Answer |
 |---|---|---|
 | 15 | Did your husband or wife pass away during 2025? | **`yes`** |
+| 20 | On what date did your husband or wife pass away? | **`03/10/2025`** |
+| 21 | Summary correct? | `yes` |
+
+Question 20 is asked only because the spouse (born 07/19/1960) turned 65 during 2025: whether
+they count as 65 depends on whether they had reached 65 when they died (policy ELIG-02). A spouse
+born earlier was already 65 when the year began, so SilverFile wouldn't ask. It is asked before the
+escalation, so the taxpayer answers everything in one sitting and the preparer sees the date.
 
 ## Step 1: trigger the escalation
 
@@ -48,17 +55,35 @@ If the name or a decision is missing, nothing is recorded and the problem is sho
 
 **Terminal alternative:** `python run.py review --session eval2`, then type your name, `1`
 (Choose the filing status yourself), `2` (Married filing jointly) and an optional note. It then
-finishes the run, which takes about 45 seconds from the terminal (Review starts a separate
-tax_math MCP server for each re-check). Run the `session` command from step 1 again (with
-`--session eval2 --offline`) to write the draft to `out/eval2_1040sr.html`.
+finishes the run, which takes one to two minutes from the terminal with no output while it works
+(Review starts a separate tax_math MCP server for each re-check). Run the `session` command from
+step 1 again (with `--session eval2 --offline`) to write the draft to `out/eval2_1040sr.html`.
 
 ## Expected result
 
 The run resumes from the checkpoint: Eligibility & Rules re-runs with the preparer's decision,
 then Computation and Review, and the session ends `approved`. The draft (dashboard **Draft Form
-1040-SR** tab, or run the `session` command again to write `out/eval2_1040sr.html`) has the same
-amounts as case 1 (filing status married filing jointly, 12e $34,700), and its "Review and human
-decisions" section records who chose what and when.
+1040-SR** tab, or run the `session` command again to write `out/eval2_1040sr.html`) is married
+filing jointly, and its "Review and human decisions" section records who chose what and when.
+
+The income lines are the same as case 1. The deductions differ, because the spouse died on
+March 10, 2025, before reaching 65 on July 18, 2025 (the day before the 65th birthday). Only the
+taxpayer's age box on line 12d is checked, and only the taxpayer gets the senior deduction
+(ELIG-02, ELIG-03; Form 1040 instructions, line 12d, and Publication 501, "Death of spouse"):
+
+| Line | Amount | How |
+|---|---|---|
+| 12d | 1 box | You 65 or older; spouse not 65 at death |
+| 12e | 33,100 | 31,500 + 1 × 1,600 |
+| 13b | 6,000 | Taxpayer only; MAGI 93,700 is under 150,000 |
+| 14 | 39,100 | 33,100 + 6,000 |
+| 15 | 54,600 | 93,700 − 39,100 |
+| 16 / 24 | 6,075 | Schedule Y-1: 2,385 + 12% × (54,600 − 23,850) |
+| 33 | 7,850 | 5,850 withheld + 2,000 estimated |
+| 34 (overpaid) | 1,775 | 7,850 − 6,075 |
+| 37 (owed) | 0 | |
+
+Every other line matches case 1 (1z 18,500, 6a 40,000, 6b 34,000, 9 and 11a 93,700, 25d 5,850).
 
 To see the other ending, choose **Stop** instead: the run ends `handed_to_preparer` and no draft
 is produced (`test_eval_case_2_stop_hands_the_return_to_a_preparer`).

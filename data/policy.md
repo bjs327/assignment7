@@ -221,10 +221,15 @@ Source: SilverFile specification, section 3.2; 2025 Form 1040 instructions, "For
   qualifying surviving spouse. On married filing separately, only if the spouse had no
   income, isn't filing a return, and can't be claimed as a dependent on someone else's return.
 - **A spouse who died in 2025:** the age box is checked only if the spouse reached 65 before
-  death. SilverFile escalates every death in the tax year anyway (FS-06).
+  death. A spouse born on or before January 1, 1960 was already 65 when 2025 began, and one
+  born after January 1, 1961 never reached 65, so only a spouse who turned 65 during 2025
+  needs the date of death. SilverFile asks for it in that case only, never assumes it, and
+  escalates every death in the tax year anyway (FS-06). Example: born July 19, 1960, the
+  spouse counts as 65 from July 18, 2025; if they died on March 10, 2025 the box stays empty.
 
 Source: 2025 Form 1040 instructions, line 12d, "Born before January 2, 1961, or blind"
-(https://www.irs.gov/instructions/i1040gi).
+(https://www.irs.gov/instructions/i1040gi); Publication 501 (2025), "Death of spouse"
+(https://www.irs.gov/publications/p501).
 
 ### ELIG-03: Who qualifies for the senior deduction
 
@@ -235,7 +240,8 @@ A person qualifies for the Schedule 1-A enhanced deduction for seniors (S1A-01) 
 - if married, they file jointly. Married filing separately gets no senior deduction.
 
 On a joint return each spouse is checked separately. The spouse amount applies only to a
-joint return.
+joint return. A spouse who died in 2025 before reaching 65 doesn't qualify, whatever their
+date of birth (same test as the age box, ELIG-02).
 
 Source: SilverFile specification, section 3.2; 2025 Form 1040 instructions, line 13b and
 "Married Filing Separately" (https://www.irs.gov/instructions/i1040gi); 2025 Schedule 1-A
@@ -318,7 +324,8 @@ If the taxpayer's spouse died in 2025, the right status could be married filing 
 single or (in later years) qualifying surviving spouse, and the line 12d age box depends on
 the date of death (ELIG-02). SilverFile never picks one. It escalates to a human
 (ESC-05), whatever status the taxpayer chose, and continues only with the status the human
-confirms.
+confirms. When the date of death decides the age box, it is asked before escalating, so the
+taxpayer answers everything in one sitting and the preparer sees it when choosing.
 
 Source: SilverFile specification, section 4.4; 2025 Form 1040 instructions, "Married Filing
 Jointly" and "Qualifying Surviving Spouse" (https://www.irs.gov/instructions/i1040gi).

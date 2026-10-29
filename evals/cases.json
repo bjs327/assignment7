@@ -37,7 +37,13 @@
         "options": ["choose_filing_status", "re_ask", "stop"],
         "rules_cited": ["FS-02", "FS-06", "ESC-05"],
         "resolution": {"decision": "choose_filing_status", "filing_status": "married_filing_jointly"},
-        "after_resolution": {"run_status": "approved", "lines": {"12e": 34700}},
+        "after_resolution": {
+          "run_status": "approved",
+          "boxes_12d": {"taxpayer_65": true, "taxpayer_blind": false, "spouse_65": false, "spouse_blind": false},
+          "note": "The spouse (born 1960-07-19, 65 from 2025-07-18) died on 2025-03-10, before reaching 65 (ELIG-02, ELIG-03).",
+          "lines": {"12e": 33100, "13b": 6000, "14": 39100, "15": 54600, "16": 6075, "24": 6075, "33": 7850,
+                    "34": 1775, "37": 0}
+        },
         "if_stopped": {"run_status": "handed_to_preparer", "draft_return": null}
       }
     }

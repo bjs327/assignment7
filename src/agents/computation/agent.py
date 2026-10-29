@@ -181,7 +181,8 @@ def build_draft_return(g: Gathered, lines: dict[str, dict[str, Any]], revision: 
         "tax_year": TAX_YEAR,
         "filing_status": g.filing_status,
         "taxpayer": {"dob": g.taxpayer_dob},
-        "spouse": {"dob": g.spouse_dob} if g.spouse_dob else None,
+        "spouse": ({"dob": g.spouse_dob, **({"date_of_death": g.spouse_date_of_death} if g.spouse_date_of_death else {})}
+                   if g.spouse_dob else None),
         "boxes_12d": {"taxpayer_65": inputs["taxpayer_65_or_older"], "taxpayer_blind": inputs["taxpayer_blind"],
                       "spouse_65": inputs["spouse_65_or_older"], "spouse_blind": inputs["spouse_blind"]},
         "scope_facts": g.scope_facts,

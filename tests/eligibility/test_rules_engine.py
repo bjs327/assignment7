@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from agents.eligibility import evaluate, EligibilityFacts
-from agents.eligibility.rules_engine import parse_distribution_codes, reached_70_and_a_half_by
+from agents.eligibility.rules_engine import considered_65_on, parse_distribution_codes, reached_70_and_a_half_by
 
 TP_SSN, SP_SSN = "900-12-3456", "901-22-3333"
 
@@ -231,6 +231,70 @@ def test_after_human_picks_joint_the_spouse_details_are_asked_for():
     d = evaluate(facts(spouse_died_in_2025=True, human_resolutions=[resolution]))
     assert d.status == "needs_facts" and d.filing_status.value == "married_filing_jointly"
     assert {"spouse_ssn", "spouse_dob", "spouse_blind"} <= {m.field for m in d.missing_facts}
+
+
+# ELIG-02/ELIG-03: a spouse who died in 2025 counts as 65 only if they reached 65 before death.
+
+TURNED_65_IN_2025 = {"ssn": SP_SSN, "date_of_birth": "1960-07-19", "blind": False}  # 65 from 2025-07-18
+JOINT_CHOSEN = {"code": "spouse_died_in_tax_year", "filing_status": "married_filing_jointly",
+                "resolved_by": "preparer", "resolved_at": "2026-02-01T10:00:00Z"}
+
+
+def test_the_date_of_death_is_asked_before_escalating_when_it_decides_the_age_box():
+    d = evaluate(joint(spouse=TURNED_65_IN_2025, spouse_died_in_2025=True))
+    assert d.status == "needs_facts" and not d.escalations
+    assert "spouse_date_of_death" in {m.field for m in d.missing_facts}
+
+    d = evaluate(joint(spouse=TURNED_65_IN_2025, spouse_died_in_2025=True, spouse_date_of_death="2025-03-10"))
+    assert d.status == "escalated" and "spouse_died_in_tax_year" in codes(d)
+
+
+@pytest.mark.parametrize("born, asked", [
+    ("1960-01-01", False),  # already 65 on 2024-12-31
+    ("1960-01-02", True),   # 65 on 2025-01-01
+    ("1961-01-01", True),   # 65 on 2025-12-31
+    ("1952-02-01", False),
+])
+def test_the_date_of_death_is_asked_only_for_a_spouse_who_turned_65_in_2025(born, asked):
+    d = evaluate(joint(spouse={**TURNED_65_IN_2025, "date_of_birth": born}, spouse_died_in_2025=True))
+    assert ("spouse_date_of_death" in {m.field for m in d.missing_facts}) is asked
+
+
+@pytest.mark.parametrize("died, counts_as_65", [
+    ("2025-03-10", False),
+    ("2025-07-17", False),
+    ("2025-07-18", True),  # the day before the 65th birthday
+    ("2025-11-30", True),
+])
+def test_a_spouse_who_died_in_2025_counts_as_65_only_if_65_at_death(died, counts_as_65):
+    d = evaluate(joint(spouse=TURNED_65_IN_2025, spouse_died_in_2025=True, spouse_date_of_death=died,
+                       human_resolutions=[JOINT_CHOSEN]))
+    assert d.status == "complete"
+    assert d.computation_inputs["spouse_65_or_older"] is counts_as_65
+    assert d.computation_inputs["spouse_qualifies"] is counts_as_65
+    assert d.computation_inputs["taxpayer_65_or_older"] and d.computation_inputs["taxpayer_qualifies"]
+    assert d.form_1040sr_eligible is True
+    box = next(x for x in d.findings if x.topic == "line_12d.spouse_65_or_older")
+    assert died in box.reason and "2025-07-18" in box.reason and box.rule_ids == ["ELIG-02"]
+
+
+def test_a_date_of_death_outside_2025_asks_both_answers_again():
+    d = evaluate(joint(spouse=TURNED_65_IN_2025, spouse_died_in_2025=True, spouse_date_of_death="2024-12-01",
+                       human_resolutions=[JOINT_CHOSEN]))
+    assert d.status == "needs_facts" and d.computation_inputs is None
+    assert {"spouse_died_in_2025", "spouse_date_of_death"} <= {m.field for m in d.missing_facts}
+
+
+def test_after_a_preparer_picks_joint_the_date_of_death_is_still_needed():
+    d = evaluate(joint(spouse=TURNED_65_IN_2025, spouse_died_in_2025=True, human_resolutions=[JOINT_CHOSEN]))
+    assert d.status == "needs_facts" and d.computation_inputs is None
+    assert "spouse_date_of_death" in {m.field for m in d.missing_facts}
+
+
+def test_considered_65_on_is_the_day_before_the_65th_birthday():
+    assert considered_65_on(date(1960, 7, 19)) == date(2025, 7, 18)
+    assert considered_65_on(date(1960, 1, 1)) == date(2024, 12, 31)
+    assert considered_65_on(date(1960, 2, 29)) == date(2025, 2, 28)  # birthday on 1 March in 2025
 
 
 def _qss(**overrides):

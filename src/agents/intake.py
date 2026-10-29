@@ -204,7 +204,7 @@ class IntakeRecord(BaseModel):
     dependents: list[Dependent] = []
     documents: list[DocumentItem] = []
     estimated_payments: list[EstimatedPayment] = []
-    additional_facts: dict[str, bool | int] = Field(
+    additional_facts: dict[str, bool | int | date] = Field(
         default={}, description="Answers to questions other agents asked for (ADDITIONAL_QUESTIONS)."
     )
     confirmed_by_taxpayer: bool
@@ -231,6 +231,11 @@ ADDITIONAL_QUESTIONS: dict[str, tuple[str, str, str]] = {
         "year",
         "In what year did your husband or wife pass away? (for example 2024)",
         "Year your spouse passed away",
+    ),
+    "spouse_date_of_death": (
+        "date",
+        "On what date did your husband or wife pass away? (for example 03/14/2025)",
+        "Date your spouse passed away",
     ),
     "remarried_before_end_of_2025": (
         "yes_no",

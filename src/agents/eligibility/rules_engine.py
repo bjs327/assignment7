@@ -20,7 +20,7 @@ arithmetic: no dollar amount is computed here.
 from __future__ import annotations
 
 import calendar
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -150,6 +150,15 @@ def born_before_cutoff(dob: date) -> bool:
     return dob < BORN_BEFORE
 
 
+def considered_65_on(dob: date) -> date:
+    """ELIG-02: a person is considered to reach age 65 on the day before their 65th birthday."""
+    try:
+        birthday = dob.replace(year=dob.year + 65)
+    except ValueError:  # born on February 29: the birthday falls on March 1 in a common year
+        birthday = date(dob.year + 65, 3, 1)
+    return birthday - timedelta(days=1)
+
+
 def reached_70_and_a_half_by(dob: date, on: date) -> bool:
     """SCOPE-05: whether someone born on ``dob`` is 70½ on ``on``. Calendar months only."""
     year, month = dob.year + 70 + (dob.month + 5) // 12, (dob.month + 5) % 12 + 1
@@ -243,6 +252,35 @@ def _check_ssns(run: _Run, status: FilingStatus | None) -> None:
             run.need(field, f"The return needs a test SSN for the {who.replace('.', ' ')}.", ["GRD-03"])
 
 
+def _death_date_decides_age(f: EligibilityFacts) -> bool:
+    """ELIG-02, ELIG-03: the spouse died in 2025 and reached 65 during 2025, so whether they
+    count as 65 depends on the date of death. A spouse born earlier was already 65 when the
+    year began; one born later never reached 65. Only this case needs the date."""
+    died = f.spouse_died_in_2025 or f.spouse_death_year == TAX_YEAR
+    sp = f.spouse
+    return bool(died and sp and sp.date_of_birth and considered_65_on(sp.date_of_birth).year == TAX_YEAR)
+
+
+def _ask_spouse_death_date(run: _Run) -> bool:
+    """Ask Intake for the spouse's date of death when it decides their age and isn't known, or
+    isn't in 2025. True if it was asked. Never assumed (GRD-02)."""
+    f = run.facts
+    if not _death_date_decides_age(f):
+        return False
+    died_on = f.spouse_date_of_death
+    if died_on is None:
+        run.need("spouse_date_of_death", "The spouse turned 65 during 2025, so their age box and senior "
+                 "deduction depend on whether they had reached 65 when they died.", ["ELIG-02", "ELIG-03"])
+        return True
+    if died_on.year != TAX_YEAR:
+        why = (f"The date of death given ({died_on.strftime('%m/%d/%Y')}) is not in 2025, but the taxpayer "
+               "said their spouse passed away during 2025.")
+        run.need("spouse_died_in_2025", why, ["FS-06"])
+        run.need("spouse_date_of_death", why, ["ELIG-02", "FS-06"])
+        return True
+    return False
+
+
 def _check_filing_status(run: _Run) -> FilingStatus | None:
     """FS-01 to FS-06. Returns the status the rest of the checks should use, or None."""
     f = run.facts
@@ -271,6 +309,10 @@ def _check_filing_status(run: _Run) -> FilingStatus | None:
             return None
     elif f.spouse_died_in_2025 is None:
         run.need("spouse_died_in_2025", "A spouse who died during the year changes which status applies.", ["FS-06"])
+    elif f.spouse_died_in_2025 and _ask_spouse_death_date(run):
+        # Asked before escalating, so the taxpayer answers everything in one sitting and the
+        # preparer sees the date of death when choosing the status.
+        return None
     elif f.spouse_died_in_2025 and run.escalate("spouse_died_in_tax_year", "filing_status_ambiguity",
                      f"The taxpayer chose {status.label.lower()}, and their spouse died during 2025. "
                      "Married filing jointly, single or another status may apply: a person needs to decide.",
@@ -377,10 +419,24 @@ def _check_1040sr_and_boxes(run: _Run, status: FilingStatus | None) -> tuple[dic
                      + " was born before January 2, 1961, so the return is Form 1040, not 1040-SR.",
                      ["ELIG-01", "ESC-01"])
 
+    # ELIG-02, ELIG-03: a spouse who died in 2025 counts as 65 only if they reached 65 before
+    # death. sp_65 drives the spouse's age box and senior deduction; sp_old stays the birth-date
+    # test for Form 1040-SR eligibility (ELIG-01).
+    sp_65, sp_age_reason = sp_old, f"Spouse born {sp.date_of_birth.isoformat()}." if sp_old is not None else ""
+    if sp_old and claimed in MARRIED and _death_date_decides_age(f):
+        if _ask_spouse_death_date(run):
+            sp_65 = None
+        else:
+            reached = considered_65_on(sp.date_of_birth)
+            sp_65 = f.spouse_date_of_death >= reached
+            sp_age_reason = (f"Spouse born {sp.date_of_birth.isoformat()} counts as 65 from {reached.isoformat()} and "
+                             f"died {f.spouse_date_of_death.isoformat()}: "
+                             + ("65 or older at death." if sp_65 else "died before reaching 65."))
+
     if status is None or tp_old is None or tp.blind is None:
         return None, None
     joint = status is FS.MARRIED_FILING_JOINTLY
-    if status in MARRIED and (sp is None or sp_old is None or sp.blind is None):
+    if status in MARRIED and (sp is None or sp_65 is None or sp.blind is None):
         return None, None
 
     # ELIG-02: the four boxes.
@@ -394,8 +450,7 @@ def _check_1040sr_and_boxes(run: _Run, status: FilingStatus | None) -> tuple[dic
         "spouse_blind": False,
     }
     if joint:
-        boxes["spouse_65_or_older"] = run.find("line_12d.spouse_65_or_older", sp_old,
-                                               f"Spouse born {sp.date_of_birth.isoformat()}.", ["ELIG-02"])
+        boxes["spouse_65_or_older"] = run.find("line_12d.spouse_65_or_older", sp_65, sp_age_reason, ["ELIG-02"])
         boxes["spouse_blind"] = run.find("line_12d.spouse_blind", sp.blind, "Joint return: spouse boxes apply.", ["ELIG-02"])
     elif status is FS.MARRIED_FILING_SEPARATELY and (sp_old or sp.blind):
         # Spouse boxes on a separate return only if the spouse had no income, isn't filing
@@ -409,7 +464,7 @@ def _check_1040sr_and_boxes(run: _Run, status: FilingStatus | None) -> tuple[dic
             return None, None
         allowed = not any(conditions.values())
         boxes["spouse_65_or_older"] = run.find(
-            "line_12d.spouse_65_or_older", bool(sp_old and allowed),
+            "line_12d.spouse_65_or_older", bool(sp_65 and allowed),
             "Separate return: spouse had no income, isn't filing and can't be claimed as a dependent."
             if allowed else "Separate return: spouse boxes don't apply because the spouse had income, is "
             "filing, or can be claimed as a dependent.", ["ELIG-02"])
@@ -431,9 +486,10 @@ def _check_1040sr_and_boxes(run: _Run, status: FilingStatus | None) -> tuple[dic
             "taxpayer_qualifies": run.find("senior_deduction.taxpayer_qualifies", bool(tp_old and tp_ssn_ok),
                                            "Born before January 2, 1961 with a valid SSN." if tp_old and tp_ssn_ok
                                            else "Not 65 or older by the end of 2025, or no valid SSN.", ["ELIG-03"]),
-            "spouse_qualifies": run.find("senior_deduction.spouse_qualifies", bool(joint and sp_old and sp_ssn_ok),
+            "spouse_qualifies": run.find("senior_deduction.spouse_qualifies", bool(joint and sp_65 and sp_ssn_ok),
                                          "Joint return; spouse born before January 2, 1961 with a valid SSN."
-                                         if joint and sp_old and sp_ssn_ok else
+                                         if joint and sp_65 and sp_ssn_ok else
+                                         "The spouse died in 2025 before reaching 65." if joint and sp_old and not sp_65 else
                                          "The spouse amount needs a joint return and a spouse 65 or older.", ["ELIG-03"]),
         }
     return boxes, senior

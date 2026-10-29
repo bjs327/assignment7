@@ -12,7 +12,8 @@ docs/IMPLEMENTATION_NOTES.md):
         "tax_year": 2025,
         "filing_status": "married_filing_jointly",
         "taxpayer": {"dob": "1958-03-02"},
-        "spouse":   {"dob": "1960-07-19"} | None,
+        "spouse":   {"dob": "1960-07-19", "date_of_death": "2025-03-10"} | None,
+                    # date_of_death only when the spouse died in 2025 and it decides the age box
         "boxes_12d": {"taxpayer_65": True, "taxpayer_blind": False,
                       "spouse_65": True, "spouse_blind": False},
         "scope_facts": {"claimed_as_dependent": False, "spouse_itemizes": False,
@@ -38,7 +39,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
@@ -320,11 +321,26 @@ _BORN_BEFORE = date(1961, 1, 2)  # 65 by the end of 2025, and the 1040-SR cut-of
 _JOINT = {"married_filing_jointly"}
 
 
-def _dob(person: Any) -> date | None:
+def _dob(person: Any, key: str = "dob") -> date | None:
     try:
-        return date.fromisoformat((person or {}).get("dob", ""))
+        return date.fromisoformat((person or {}).get(key, ""))
     except (TypeError, ValueError):
         return None
+
+
+def _counts_as_65(person: Any, dob: date | None) -> bool:
+    """65 by the end of 2025, or, for a spouse who died in 2025, 65 at death. A person turns 65
+    on the day before their 65th birthday (Form 1040 instructions, line 12d)."""
+    if dob is None or dob >= _BORN_BEFORE:
+        return False
+    died = _dob(person, "date_of_death")
+    if died is None:
+        return True
+    try:
+        birthday = dob.replace(year=dob.year + 65)
+    except ValueError:  # 29 February
+        birthday = date(dob.year + 65, 3, 1)
+    return died >= birthday - timedelta(days=1)
 
 
 def check_eligibility(ctx: ReviewContext) -> list[Finding]:
@@ -339,8 +355,8 @@ def check_eligibility(ctx: ReviewContext) -> list[Finding]:
         out.append(_f("R07-eligibility", None, "intake", "The spouse's date of birth is missing on a joint return."))
 
     tp_65 = tp_dob < _BORN_BEFORE
-    sp_65 = bool(sp_dob and sp_dob < _BORN_BEFORE)
-    if not (tp_65 or sp_65):
+    sp_65 = _counts_as_65(sp, sp_dob)  # age box and senior deduction
+    if not (tp_65 or (sp_dob and sp_dob < _BORN_BEFORE)):  # Form 1040-SR goes by date of birth alone
         out.append(_f("R07-eligibility", None, HUMAN,
                       "Neither person was born before 2 January 1961, so Form 1040-SR is not the right form."))
 
@@ -349,7 +365,8 @@ def check_eligibility(ctx: ReviewContext) -> list[Finding]:
         out.append(_f("R07-eligibility", "12d", "eligibility", "The taxpayer 65-or-older box does not match the date of birth.",
                       exp=str(tp_65), act=str(bool(boxes["taxpayer_65"]))))
     if joint and boxes.get("spouse_65") is not None and bool(boxes["spouse_65"]) != sp_65:
-        out.append(_f("R07-eligibility", "12d", "eligibility", "The spouse 65-or-older box does not match the date of birth.",
+        out.append(_f("R07-eligibility", "12d", "eligibility",
+                      "The spouse 65-or-older box does not match the date of birth (and date of death, if given).",
                       exp=str(sp_65), act=str(bool(boxes["spouse_65"]))))
     if not joint and (boxes.get("spouse_65") or boxes.get("spouse_blind")):
         out.append(_f("R07-eligibility", "12d", "eligibility", "A spouse box is checked on a return that is not joint."))
