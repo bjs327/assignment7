@@ -69,8 +69,6 @@ they go into the final paragraph.
 
 ### Eligibility & Rules (David)
 
-These notes were drafted by the AI and need David's review before they go into the final
-paragraph.
 
 - **Tool:** Claude Code in the VS Code extension, with the Claude Opus 5.5 model.
 - **Research:** No reference corpus was supplied, so Claude read the 2025 Form 1040 instructions
@@ -86,7 +84,8 @@ paragraph.
 - **What testing caught:** a QCD test case used a taxpayer too young to be 70½ (the engine was
   right, the test data was wrong), and after a human switched a return to married filing
   jointly the agent didn't ask for the spouse's details. Claude fixed the second.
-- **David's own role:** TODO. Describe your review, edits and decisions.
+
+- **David's Contributions:** I was in charge of developing the Eligibility & Rules Agent using Claude. Claude generated the agent and I verified its functionality by itself and against the connectivity of the other agents using evaluation cases. I ran a health check over all the requirements to ensure that the team wasn't missing anything.
 
 
 ### Intake Agent and Agent Memory (Jordan)
