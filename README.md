@@ -168,15 +168,14 @@ To check you are in the right place, type `ls` and press Enter: you should see `
 
 Without a key, SilverFile only reads the demo W-2 images in the `demo` folder, which is enough to
 try it out. To read your own W-2 photos, it needs an Anthropic API key
-(https://console.anthropic.com/):
+(https://console.anthropic.com/, see "API key" above for details):
 
 1. In the SilverFile folder, make a copy of `.env.example` and name the copy `.env` (just a dot
    and "env", with nothing after it). On a Mac, files starting with a dot are hidden in Finder;
    press `Cmd+Shift+.` to show them. Or run this in the terminal instead:
    `cp .env.example .env` on a Mac, `copy .env.example .env` on Windows.
-2. Open `.env` in a text editor (TextEdit or Notepad), find the line `# ANTHROPIC_API_KEY=`,
-   delete the `# ` at the start and paste your key after the `=`, like this:
-   `ANTHROPIC_API_KEY=sk-ant-...`. Save the file.
+2. Open `.env` in a text editor (TextEdit or Notepad), find the line `ANTHROPIC_API_KEY=` and
+   paste your key right after the `=`, like this: `ANTHROPIC_API_KEY=sk-ant-...`. Save the file.
 
 Never share the `.env` file or upload it anywhere.
 
