@@ -45,9 +45,22 @@ Linux. Then:
 pip install -r requirements.txt
 ```
 
-Copy `.env.example` to `.env`. Reading a W-2 image with the vision model needs
-`ANTHROPIC_API_KEY` there. Everything else, including both eval cases with `--offline`, runs
-without a key.
+### API key (only for reading new W-2 images)
+
+Only the Document Extraction agent calls an AI model: it reads W-2 photos with Anthropic's
+vision model. To read W-2 images of your own, you need your own Anthropic API key:
+
+1. Create a key at [console.anthropic.com](https://console.anthropic.com) (API Keys).
+2. Copy `.env.example` to `.env` (`cp .env.example .env`, or `copy .env.example .env` on
+   Windows).
+3. Open `.env` and set `ANTHROPIC_API_KEY=` to your key. Never commit `.env`; it is git-ignored.
+
+Reading one W-2 makes a single model call and costs a few cents.
+
+**No key?** Everything else works without one. Add `--offline` to any command (for example
+`python run.py dashboard --offline`) and the demo W-2s in `demo/` are read from the ground
+truth stored next to each image. Both eval cases, the dashboard and all tests run this way.
+`--offline` cannot read a W-2 image it hasn't seen before; that needs the key.
 
 If `import pydantic` fails with `cannot import name 'ArgsKwargs'`, the virtual environment's
 compiled files are damaged (seen once after copying a venv): delete `.venv` and create it again.
