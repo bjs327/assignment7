@@ -5,14 +5,19 @@ What is tested:
   parallel), Eligibility & Rules, Computation and Review, ending in an approved draft.
 - The review -> revise loop stops after exactly three reviews (specification section 4.1).
 - The loop guard catches a real hand-off cycle, Intake and Eligibility & Rules passing the same
-  work back and forth, and pauses for a person (section 4.1).
+  work back and forth, and pauses for a person (section 4.1). Intake now asks every question
+  Eligibility & Rules names, so the cycle is produced by an Eligibility & Rules that says it
+  needs facts without naming any: the kind of agent fault the guard exists for.
 - After a person steps in, the loop guard starts counting again from zero.
 - A session paused for a preparer is saved, and picks up where it left off after a restart.
 
 Uses the offline W-2 reader and the real tax_math tools, so no API key is needed."""
 
+import pytest
 from langgraph.types import Command
 
+import graph as graph_module
+from agents.eligibility import eligibility_node
 from agents.orchestrator import pending_review, submit_decisions
 from memory import load_session, make_checkpointer, session_config
 
@@ -58,12 +63,23 @@ def test_review_revise_loop_is_bounded_at_three_reviews(make_graph, call):
         "review:review_iteration_limit")
 
 
-def test_loop_guard_breaks_the_intake_eligibility_cycle(graph):
-    # Without the override, Eligibility asks for facts Intake can't ask yet; Intake finishes with
-    # nothing new, and the same three hand-offs repeat.
-    state = session()
-    del state["eligibility_facts"]
-    snap = run(graph, state)
+def _needs_unnamed_facts(state):
+    """Eligibility & Rules with a fault: it reports needs_facts but names no fact, so Intake
+    has nothing to ask, finishes at once, and the same three hand-offs repeat."""
+    result = eligibility_node(state)
+    return {**result, "eligibility": {**result["eligibility"], "status": "needs_facts"},
+            "eligibility_reask": [], "eligibility_notice": ""}
+
+
+@pytest.fixture
+def cycling_graph(make_graph, monkeypatch):
+    monkeypatch.setattr(graph_module, "eligibility_node", _needs_unnamed_facts)
+    return make_graph()
+
+
+def test_loop_guard_breaks_the_intake_eligibility_cycle(cycling_graph):
+    graph = cycling_graph
+    snap = run(graph, session())
     route = snap.values["route_history"]
     assert route == ["intake", "extraction", "eligibility_rules"] * 3 + ["human_review"]
     packet = pending_review(graph, "session_1")
@@ -71,10 +87,9 @@ def test_loop_guard_breaks_the_intake_eligibility_cycle(graph):
     assert [o["decision"] for o in packet["issues"][0]["options"]] == ["re_ask", "stop"]
 
 
-def test_loop_guard_counts_again_after_a_person_steps_in(graph):
-    state = session()
-    del state["eligibility_facts"]
-    run(graph, state)
+def test_loop_guard_counts_again_after_a_person_steps_in(cycling_graph):
+    graph = cycling_graph
+    run(graph, session())
     packet = pending_review(graph, "session_1")
     submit_decisions(graph, "session_1", decide(packet, "re_ask", reask_fields=["filing_status"]))
 

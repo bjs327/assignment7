@@ -423,3 +423,81 @@ def test_an_unsupported_request_in_the_full_graph_reaches_a_preparer(full_graph)
     assert v["route_history"] == ["intake", "human_review"]
     packet = pending_review(full_graph, "session_1")
     assert "document.r-1.7" in packet["issues"][0]["reason"]
+
+
+# --- Intake's outputs survive the trip through the main graph (state.py) ---------------------
+
+
+def _keeps_asking_dual_status(state):
+    """Eligibility & Rules with a fault: it asks for dual_status_alien every time, even after
+    the taxpayer has answered."""
+    from agents.eligibility import eligibility_node
+
+    result = eligibility_node(state)
+    return {**result, "eligibility": {**result["eligibility"], "status": "needs_facts"},
+            "eligibility_reask": ["dual_status_alien"], "eligibility_notice": ""}
+
+
+def _answer_intake(g, sid="session_1"):
+    while (q := _pending(g, sid)) and q["type"] == "intake_question":
+        g.invoke(Command(resume="yes" if q["field"] == "confirm" else "no"), session_config(sid))
+
+
+def test_intake_message_reaches_the_main_state(full_graph):
+    """LangGraph drops subgraph outputs the parent state doesn't declare; this one used to vanish."""
+    state = session()
+    del state["intake_answers"]["confirm"]
+    full_graph.invoke(state, session_config("session_1"))
+    full_graph.invoke(Command(resume="I'd like to talk to a person please"),
+                      session_config("session_1"))
+    v = load_session(full_graph, "session_1").values
+    assert v["intake_status"] == "awaiting_human"
+    assert "Kushim staff member" in v["intake_message"]
+
+
+def test_intake_requests_reach_the_main_state(full_graph):
+    full_graph.invoke({**session(), "intake_reask": ["dual_status_alien"]}, session_config("session_1"))
+    _answer_intake(full_graph)
+    requests = load_session(full_graph, "session_1").values["intake_requests"]
+    assert requests["dual_status_alien"] == {"requested": 1, "status": "answered", "cleared": 0}
+
+
+def test_a_field_requested_again_and_again_reaches_a_preparer_in_the_full_graph(
+        call, monkeypatch):
+    import graph as graph_module
+
+    monkeypatch.setattr(graph_module, "eligibility_node", _keeps_asking_dual_status)
+    g = build_graph(make_checkpointer(), extractor=FixtureW2Extractor(),
+                    computation_caller=call, review_caller=call)
+    g.invoke(session(), session_config("session_1"))
+    _answer_intake(g)
+    v = load_session(g, "session_1").values
+    # The count carries across Intake's visits (it used to restart at 1 on every visit).
+    assert v["intake_requests"]["dual_status_alien"]["requested"] == 2
+    packet = pending_review(g, "session_1")
+    assert [i["title"] for i in packet["issues"]] == ["Work is going round in circles"]
+
+    # A preparer has it asked once more; the next request is one too many and goes to a person.
+    submit_decisions(g, "session_1", decide(packet, "re_ask", reask_fields=["dual_status_alien"]))
+    _answer_intake(g)
+    v = load_session(g, "session_1").values
+    assert v["intake_requests"]["dual_status_alien"]["status"] == "repeated"
+    flags = [e for e in v["intake_escalations"] if e["type"] == "repeated_request"]
+    assert [e["field"] for e in flags] == ["dual_status_alien"]
+    assert v["route_history"][-1] == "human_review"
+
+
+def test_progress_counts_the_questions_other_agents_asked_for(full_graph):
+    full_graph.invoke({**session(), "intake_reask": ["dual_status_alien"]}, session_config("session_1"))
+    q = _pending(full_graph)
+    assert q["field"] == "dual_status_alien"
+    assert q["progress"]["answered"] < q["progress"]["total"]  # it used to say "13 of 13"
+
+
+def test_a_summary_of_a_half_finished_interview_doesnt_claim_answers():
+    from agents.intake import summarize_answers
+
+    text = summarize_answers({"filing_status": "single"})
+    assert "Dependents: (not answered)" in text and "Estimated payments: (not answered)" in text
+    full = summarize_answers({"filing_status": "single", "has_dependents": False, "has_estimated_payments": False})
+    assert "Dependents: none" in full and "Estimated payments: none" in full

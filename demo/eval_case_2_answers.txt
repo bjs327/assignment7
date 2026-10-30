@@ -1,0 +1,19 @@
+married filing jointly
+900-12-3456
+03/02/1958
+no
+901-22-3333
+07/19/1960
+no
+no
+a W-2, 2 SSA-1099s, a 1099-INT and a 1099-R
+yes
+2
+1000
+1000
+yes
+yes
+no
+no
+no
+yes

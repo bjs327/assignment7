@@ -6,9 +6,11 @@
     python run.py eligibility FILE   run Eligibility & Rules on a state file (JSON)
     python run.py intake             run (or resume) an intake interview in the terminal
     python run.py review             review a paused session as a preparer
+    python run.py session            run (or resume) a whole session in the terminal: W-2 upload,
+                                     typed-in forms, interview, every agent, draft Form 1040-SR
+    python run.py dashboard          the Streamlit dashboard, for taxpayers and Kushim preparers
 
-Commands for the rest of the system (the dashboard, the batch run with
---no-context-strategy) get added here as the agents land.
+Still to add: the batch run with --no-context-strategy.
 """
 
 import argparse
@@ -20,6 +22,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 
 def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["session"]:  # its options start with "--", which REMAINDER won't take
+        from app.cli import main as run_session
+
+        run_session(argv[1:])
+        return
     parser = argparse.ArgumentParser(
         prog="run.py",
         description="SilverFile: a draft Form 1040-SR preparation aid (tax year 2025).",
@@ -51,6 +59,16 @@ def main(argv: list[str] | None = None) -> None:
     )
     review.add_argument("--session", required=True, help="session ID to review")
     review.add_argument("--db", default=None, help="SQLite file for saved sessions")
+    commands.add_parser(
+        "session", help="run or resume a whole session in the terminal (see run.py session --help)"
+    )
+    dashboard = commands.add_parser(
+        "dashboard", help="start the Streamlit dashboard (taxpayer and preparer views)"
+    )
+    dashboard.add_argument("--db", default=None, help="SQLite file for saved sessions")
+    dashboard.add_argument("--offline", action="store_true",
+                           help="read W-2s with the offline test reader instead of the vision model")
+    dashboard.add_argument("--port", default="8501")
     args = parser.parse_args(argv)
 
     if args.command == "tax-math-server":
@@ -73,6 +91,16 @@ def main(argv: list[str] | None = None) -> None:
         from agents.orchestrator.human_review import main as run_review
 
         run_review(["--session", args.session] + (["--db", args.db] if args.db else []))
+    elif args.command == "dashboard":
+        import subprocess
+
+        app = Path(__file__).resolve().parent / "src" / "app" / "dashboard.py"
+        extra = (["--db", args.db] if args.db else []) + (["--offline"] if args.offline else [])
+        # Headless: no first-run e-mail prompt and no usage statistics; open the printed URL.
+        print(f"SilverFile dashboard: open http://localhost:{args.port} in a browser (Ctrl+C to stop).")
+        subprocess.run([sys.executable, "-m", "streamlit", "run", str(app), "--server.port", args.port,
+                        "--server.headless", "true", "--browser.gatherUsageStats", "false",
+                        "--", *extra], check=False)
 
 
 if __name__ == "__main__":
