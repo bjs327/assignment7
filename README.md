@@ -194,6 +194,59 @@ http://localhost:8501 in your web browser.
 To stop SilverFile, click the terminal window and press `Ctrl+C`. Your saved sessions are kept
 for next time.
 
+### 6. Or use it in the terminal instead of the browser
+
+You can also do the whole interview by typing in the terminal, without the web page. Do steps 1
+to 4 first, then build SilverFile once (this takes a few minutes the first time):
+
+```bash
+docker compose build
+```
+
+**Try the demo.** This runs a made-up couple (eval case 1) with the demo W-2 and forms:
+
+```bash
+docker compose run --rm silverfile session --session try1 --w2 demo/w2_image_1.jpg --forms demo/eval_case_1_forms.json --offline
+```
+
+SilverFile asks one question at a time. Type your answer after the `>` and press Enter. For the
+demo, use the answers in [demo/eval_case_1.md](demo/eval_case_1.md) (filing status
+`married filing jointly`, SSN `900-12-3456`, and so on). To see the whole run without typing,
+add `--answers demo/eval_case_1_answers.txt` to the end of the command.
+
+What the parts of the command mean:
+
+- `--session try1` is the name of your session. Pick any name without spaces. Use a new name to
+  start a new return; use the same name to come back to one.
+- `--w2 demo/w2_image_1.jpg` is a W-2 photo. Repeat it for each W-2
+  (`--w2 first.jpg --w2 second.jpg`).
+- `--forms demo/eval_case_1_forms.json` is a file with the amounts from your other forms
+  (SSA-1099, 1099-INT, 1099-DIV, 1099-R). Copy that file and change the amounts for your own.
+- `--offline` reads only the demo W-2s, with no API key. Leave it out to read your own W-2 photos
+  (this needs the key from step 4).
+
+**Using your own W-2 photo or forms file:** put the file in the SilverFile folder, run
+`docker compose build` again so Docker can see it, and use its name in the command, for example
+`--w2 my_w2.jpg`.
+
+**Stopping and coming back:** press `Ctrl+C` at any question. Your answers are saved; run the
+same command again with the same session name to carry on where you left off.
+
+**When it's done**, it prints `Draft Form 1040-SR written to out/try1_1040sr.html`. Open the `out`
+folder inside the SilverFile folder and double-click that file to see the draft in your browser.
+
+**If a person needs to check something** (for example, a spouse who died during the year), it
+prints `This session is waiting for a Kushim preparer`. The preparer reviews it with:
+
+```bash
+docker compose run --rm silverfile review --session try1
+```
+
+They pick a decision for each issue by typing its number. Then run the `session` command again
+with the same session name to finish. (The message on screen shows these commands starting with
+`python run.py`; with Docker, use `docker compose run --rm silverfile` in its place.) Eval case 2
+walks through this: [demo/eval_case_2.md](demo/eval_case_2.md).
+
 ### Using it again later
 
 Open Docker Desktop, open a terminal in the SilverFile folder (step 3), and run
