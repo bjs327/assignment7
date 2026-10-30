@@ -5,7 +5,11 @@ capped at 60/70.
 
 ## Final paragraph
 
-TODO: combine each member's notes below into the final paragraph.
+Every member of the team used Anthropic's Claude (Claude Opus 5.5) as a pair programmer: through
+Claude Code in VS Code (David, Jordan, Verena, Marco), the Claude desktop and web apps (Brendan,
+Yassine, Joshua), with Jordan also using ChatGPT for planning and LangGraph troubleshooting. Claude wrote most of the code, tests and documentation, working from plans each member set and approved: the deterministic `tax_math` package, its MCP server and about 330 tests, and the Computation agent(Brendan); the Eligibility & Rules decision table and about 85 tests, after researching the 2025 IRS Form 1040 and 1099-R instructions to build the cited rule corpus in `data/policy.md` (David); the Intake agent and SQLite session memory (Jordan); the W-2 extraction agent, the SSN security module
+and the fake W-2 fixtures, including a prompt-injection test (Yassine); the Review agent's twelve checks and bounded revision loop (Marco); the Orchestrator, shared state, graph wiring, loop guard and human-review step (Verena); and the Docker setup, the context-window batch and drafts of the report (Joshua). Team members made the design decisions: a deterministic, cited decision table instead of model output for eligibility; flagging doubtful W-2 values rather than correcting them; a task ledger and issue-specific preparer options, with a written reason required before "safe to continue"; and how the report presents roles and results. We checked the AI's work in several ways:expected values in the tests were worked out by hand from IRS worksheets and rate schedules rather than by running the code; Verena had a second AI agent explain and challenge each proposal before she
+approved it; members reviewed every file before committing, ran the test suites and both eval cases themselves, and spot-checked the eval case 1 computations by hand; and asking Claude to re-check its work against the assignment caught real mistakes, such as a loop guard that ran before the approval check. Testing also caught errors in Claude's own test data (for example a charitable IRA distribution for someone under 70½), which were corrected.
 
 ## Notes by component
 
@@ -188,3 +192,39 @@ before they were added.
 - **Checking AI Work**
   - Before accepting any of the proposals for code addition (or before running any commands I didn't understand), I took the output from claude code and gave it to another distinct agent to explain and challenge what it was doing and whether that is what I asked for. 
   - I also made sure the code was tested in context of everything that exists and challenged the AI when it seemed to stray from the assignment requirements I provided in regards to actual implementation.
+
+### Integration, Docker, metrics and report (Joshua)
+
+- **Tool:** Claude in the Claude app (a cloud session), with the Claude Opus 5.5 model, used as a
+  pair programmer and reviewer.
+
+- **Planning:**
+  - I worked through the assignment brief and rubric with Claude to define my role on a team of
+    seven with six agents: integration, Docker, evaluation and the report.
+  - Claude drafted a work plan and the list of inputs I needed from each agent owner, which I
+    reviewed and used with the team.
+
+- **Building:**
+  - Claude assisted in writing the Docker setup: the `Dockerfile`, `docker-compose.yml`,
+    `docker-entrypoint.sh`, `.dockerignore`, `.gitattributes` and the optional `SILVERFILE_DB`
+    setting in `src/memory.py`. Its workspace couldn't download the official Python base image, so
+    it first tested on a local Python 3.13 base; the test suite and both eval cases passed inside
+    the container.
+  - Claude assisted in writing the context-window batch (`python run.py batch`, with
+    `--no-context-strategy` and `--compare`), its test, and `docs/metrics.md` from the results.
+  - Claude reviewed the integrated repository and found issues that I passed to the team: two
+    loop-guard tests broken by an Intake change (since fixed), exploitation phrasing that isn't
+    caught, the dashboard not explaining a refused SSN, and masked SSNs shown incorrectly in the
+    welcome-back summary.
+  - I wrote the five-page report with Claude's assistance: Claude drafted sections from the code
+    and the team's notes, and I edited them and decided the structure and content.
+
+- **My own role:**
+  - Reviewed the assignment instructions and rubric and decided which deliverables to take on.
+  - Made edits to the code and to the report, and reviewed Claude's changes before they were
+    committed.
+  - Ran test runs of the system and both eval cases to confirm the draft returns, the
+    human-in-the-loop escalation and the dashboard behaved as expected.
+  - Reviewed the Docker setup and the metrics results, and decided how the report presents the
+    team roles and results.
+  - Committed the work on my fork and opened the pull requests (#10 for Docker).
