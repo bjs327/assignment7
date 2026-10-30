@@ -105,6 +105,125 @@ python run.py intake --session demo_taxpayer_001                 # the interview
 `run.py intake` runs Intake's own graph. Use a different session ID from the full-system
 sessions, because both use `data/sessions.sqlite` by default.
 
+## Run with Docker
+
+Docker lets you run SilverFile without installing Python or anything else it needs. These steps
+assume no programming experience. You only need to do steps 1 to 4 once.
+
+### 1. Install Docker Desktop
+
+1. Go to https://www.docker.com/products/docker-desktop/ and download Docker Desktop for your
+   computer:
+   - **Mac:** pick "Apple Silicon" if your Mac has an M1, M2, M3 or newer chip, or "Intel chip"
+     otherwise. To check, click the Apple menu > **About This Mac** and look at "Chip" or
+     "Processor".
+   - **Windows:** pick "Windows - AMD64" (almost every Windows PC).
+2. Open the downloaded file and follow the installer. On a Mac, drag Docker into the
+   Applications folder. On Windows, keep the default options; if it asks to install or update
+   WSL, say yes and restart the computer when asked.
+3. Open **Docker Desktop** (from Applications on a Mac, or the Start menu on Windows). Accept the
+   terms; you can skip signing in. Wait until it says Docker is running (a green status at the
+   bottom left of its window).
+
+Docker Desktop must be open whenever you use SilverFile.
+
+### 2. Download SilverFile
+
+1. Go to https://github.com/bjs327/assignment7 (if you see "404", ask the team to give your
+   GitHub account access, then sign in).
+2. Click the green **Code** button, then **Download ZIP**.
+3. Find the ZIP in your Downloads folder and double-click it (on Windows, right-click > **Extract
+   All**). This makes a folder called `assignment7-main`. Move it somewhere easy to find, such as
+   your Desktop.
+
+If you already use Git, `git clone https://github.com/bjs327/assignment7.git` does the same.
+
+### 3. Open a terminal in the SilverFile folder
+
+A terminal is a window where you type commands.
+
+- **Mac:** open **Terminal** (press `Cmd+Space`, type "Terminal", press Enter). Type `cd `
+  (with a space after it), drag the `assignment7-main` folder from Finder into the Terminal
+  window, and press Enter.
+- **Windows:** open the `assignment7-main` folder in File Explorer, click in the address bar at
+  the top, type `powershell` and press Enter. A window opens already inside the folder.
+
+To check you are in the right place, type `ls` and press Enter: you should see `Dockerfile`,
+`README.md` and `docker-compose.yml` in the list.
+
+### 4. (Optional) Add an API key
+
+Without a key, SilverFile only reads the demo W-2 images in the `demo` folder, which is enough to
+try it out. To read your own W-2 photos, it needs an Anthropic API key
+(https://console.anthropic.com/):
+
+1. In the SilverFile folder, make a copy of `.env.example` and name the copy `.env` (just a dot
+   and "env", with nothing after it). On a Mac, files starting with a dot are hidden in Finder;
+   press `Cmd+Shift+.` to show them. Or run this in the terminal instead:
+   `cp .env.example .env` on a Mac, `copy .env.example .env` on Windows.
+2. Open `.env` in a text editor (TextEdit or Notepad), find the line `# ANTHROPIC_API_KEY=`,
+   delete the `# ` at the start and paste your key after the `=`, like this:
+   `ANTHROPIC_API_KEY=sk-ant-...`. Save the file.
+
+Never share the `.env` file or upload it anywhere.
+
+### 5. Start SilverFile
+
+In the terminal from step 3, type this and press Enter:
+
+```bash
+docker compose up --build
+```
+
+The first time takes a few minutes while Docker downloads and installs everything; later starts
+take seconds. When you see `You can now view your Streamlit app in your browser`, open
+http://localhost:8501 in your web browser.
+
+To stop SilverFile, click the terminal window and press `Ctrl+C`. Your saved sessions are kept
+for next time.
+
+### Using it again later
+
+Open Docker Desktop, open a terminal in the SilverFile folder (step 3), and run
+`docker compose up` again. If you downloaded a newer version of SilverFile, use
+`docker compose up --build` so Docker picks up the changes.
+
+### If something goes wrong
+
+- **`docker: command not found`** or **`'docker' is not recognized`**: Docker Desktop isn't
+  installed, or the terminal was opened before installing it. Close the terminal and open a new
+  one.
+- **`Cannot connect to the Docker daemon`** or **`error during connect`**: Docker Desktop isn't
+  running. Open it, wait until it shows as running, and try again.
+- **`no configuration file provided: not found`**: the terminal isn't in the SilverFile folder.
+  Repeat step 3.
+- **`port is already allocated`**: SilverFile (or something else) is already running on port
+  8501. Close other terminals running SilverFile, or run `docker compose down`, then try again.
+- **The page at http://localhost:8501 won't load**: wait a little longer, the app may still be
+  starting. Check the terminal for an error message.
+
+### More Docker commands
+
+Any other `run.py` command runs in a one-off container, with the same arguments as in "Running" above:
+
+```bash
+docker compose run --rm silverfile session --session demo_1 --w2 demo/w2_image_1.jpg --forms demo/eval_case_1_forms.json --offline
+docker compose run --rm silverfile review --session demo_1
+docker compose run --rm silverfile pytest                     # the test suite
+```
+
+Where the data goes:
+
+- Saved sessions are kept in the `silverfile-state` volume and uploaded W-2 images in
+  `silverfile-uploads`, so they survive restarts. `docker compose down -v` deletes both.
+- Draft forms are written to `out/` on your machine.
+- `.env`, `.venv`, saved sessions and uploads are never copied into the image (see
+  `.dockerignore`).
+
+Rebuild with `docker compose up --build` after changing the code or `requirements.txt`. Run
+`docker compose up -d` to start the dashboard in the background and `docker compose down` to stop
+it.
+
 ## Tests
 
 ```bash
@@ -168,6 +287,7 @@ The Orchestrator's own notes explain the choice of topology:
 ├── .env.example
 ├── run.py                       command-line entry point
 ├── pytest.ini
+├── Dockerfile, docker-compose.yml, docker-entrypoint.sh   the container (see "Run with Docker")
 ├── src/                         import root: code imports tax_math, state, agents.intake, ...
 │   ├── state.py                 shared state and reducers
 │   ├── graph.py                 LangGraph wiring
