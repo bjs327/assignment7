@@ -60,8 +60,8 @@ they go into the final paragraph.
   - Kept tax year 2025 after Claude pointed out that the specification requires it.
   - Asked for the code review to put simplicity first, and approved the fixes.
   - Chose where the repository lives, and directed the merges and the Computation work.
-- **Brendan's own review:** TODO. Describe how you checked Claude's work and anything you changed
-  yourself.
+- **Brendan's own review:** Brendan manually reviewed the computations in eval case 1 to
+  spot-check that the system was working properly.
 
 ### Eligibility & Rules (David)
 

@@ -23,10 +23,10 @@ between documents and answers, and any request for advice goes to a human.
 
 | Focus area | Team member assigned |
 |---|---|
-| Agent memory | TODO |
+| Agent memory | Jordan |
 | Inter agent communication | Brendan |
-| Task division and management | TODO |
-| MLOps/DevOps | TODO |
+| Task division and management | Verena |
+| MLOps/DevOps | David |
 | Guardrails and ethics | Marco |
 | Security | Yassine |
 
