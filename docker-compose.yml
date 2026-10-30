@@ -1,0 +1,25 @@
+# docker compose up --build      then open http://localhost:8501
+# See "Run with Docker" in README.md for the eval cases and other commands.
+services:
+  silverfile:
+    build: .
+    image: silverfile
+    ports:
+      - "8501:8501"
+    env_file:
+      - path: .env          # optional: API key for reading real W-2 images
+        required: false
+    volumes:
+      - silverfile-state:/state                  # saved sessions (survive restarts)
+      - silverfile-uploads:/app/data/uploads     # W-2 images uploaded in the dashboard
+      - ./out:/app/out                           # draft 1040-SR HTML files, readable on your machine
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  silverfile-state:
+  silverfile-uploads:
