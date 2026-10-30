@@ -1,0 +1,217 @@
+{
+  "session_id": "eval2",
+  "run_status": "approved",
+  "waiting_for": [],
+  "route_history": [
+    "intake",
+    "extraction",
+    "eligibility_rules",
+    "intake",
+    "extraction",
+    "eligibility_rules",
+    "intake",
+    "extraction",
+    "eligibility_rules",
+    "human_review",
+    "eligibility_rules",
+    "computation",
+    "review",
+    "finalize"
+  ],
+  "task_ledger": {
+    "intake": {
+      "task_id": "intake",
+      "agent": "intake",
+      "status": "done",
+      "depends_on": [],
+      "attempts": 3,
+      "created_at": "2026-10-29T23:50:12+00:00",
+      "updated_at": "2026-10-29T23:50:13+00:00",
+      "note": "Interview complete."
+    },
+    "extraction": {
+      "task_id": "extraction",
+      "agent": "extraction",
+      "status": "done",
+      "depends_on": [
+        "intake"
+      ],
+      "attempts": 3,
+      "created_at": "2026-10-29T23:50:12+00:00",
+      "updated_at": "2026-10-29T23:50:13+00:00",
+      "note": "Documents read."
+    },
+    "eligibility": {
+      "task_id": "eligibility",
+      "agent": "eligibility_rules",
+      "status": "done",
+      "depends_on": [
+        "intake",
+        "extraction"
+      ],
+      "attempts": 4,
+      "created_at": "2026-10-29T23:50:12+00:00",
+      "updated_at": "2026-10-29T23:50:18+00:00",
+      "note": "Eligibility decided."
+    },
+    "computation": {
+      "task_id": "computation",
+      "agent": "computation",
+      "status": "done",
+      "depends_on": [
+        "eligibility",
+        "extraction"
+      ],
+      "attempts": 1,
+      "created_at": "2026-10-29T23:50:12+00:00",
+      "updated_at": "2026-10-29T23:50:19+00:00",
+      "note": "Draft return computed."
+    },
+    "review": {
+      "task_id": "review",
+      "agent": "review",
+      "status": "done",
+      "depends_on": [
+        "computation"
+      ],
+      "attempts": 1,
+      "created_at": "2026-10-29T23:50:12+00:00",
+      "updated_at": "2026-10-29T23:52:01+00:00",
+      "note": "Approved."
+    }
+  },
+  "trace": [
+    {
+      "agent": "document_extraction",
+      "event": "extracted",
+      "at": "2026-10-29T23:50:12+00:00",
+      "document_id": "w2-1",
+      "status": "extracted",
+      "fields": [
+        "box1",
+        "box2",
+        "box3",
+        "box4",
+        "box5",
+        "box6"
+      ],
+      "attempt": 1
+    },
+    {
+      "agent": "document_extraction",
+      "event": "aggregated",
+      "at": "2026-10-29T23:50:12+00:00",
+      "extracted": 1,
+      "needs_review": 0,
+      "failed": 0,
+      "manual_entry_required": 0
+    },
+    {
+      "agent": "eligibility_rules",
+      "event": "evaluated",
+      "at": "2026-10-29T23:50:12+00:00",
+      "attempt": 1,
+      "status": "needs_facts",
+      "missing_facts": 4,
+      "escalations": []
+    },
+    {
+      "agent": "document_extraction",
+      "event": "aggregated",
+      "at": "2026-10-29T23:50:12+00:00",
+      "extracted": 1,
+      "needs_review": 0,
+      "failed": 0,
+      "manual_entry_required": 0
+    },
+    {
+      "agent": "eligibility_rules",
+      "event": "evaluated",
+      "at": "2026-10-29T23:50:12+00:00",
+      "attempt": 2,
+      "status": "needs_facts",
+      "missing_facts": 1,
+      "escalations": []
+    },
+    {
+      "agent": "document_extraction",
+      "event": "aggregated",
+      "at": "2026-10-29T23:50:13+00:00",
+      "extracted": 1,
+      "needs_review": 0,
+      "failed": 0,
+      "manual_entry_required": 0
+    },
+    {
+      "agent": "eligibility_rules",
+      "event": "evaluated",
+      "at": "2026-10-29T23:50:13+00:00",
+      "attempt": 3,
+      "status": "escalated",
+      "missing_facts": 0,
+      "escalations": [
+        "spouse_died_in_tax_year"
+      ]
+    },
+    {
+      "agent": "eligibility_rules",
+      "event": "evaluated",
+      "at": "2026-10-29T23:50:18+00:00",
+      "attempt": 4,
+      "status": "complete",
+      "missing_facts": 0,
+      "escalations": []
+    },
+    {
+      "agent": "computation",
+      "event": "complete",
+      "revision": 1,
+      "lines": 31,
+      "missing": [],
+      "answered_findings": [],
+      "at": "2026-10-29T23:50:19+00:00"
+    }
+  ],
+  "escalations": [
+    {
+      "source_agent": "eligibility_rules",
+      "document_id": null,
+      "code": "spouse_died_in_tax_year",
+      "category": "filing_status_ambiguity",
+      "reason": "The taxpayer chose married filing jointly, and their spouse died during 2025. Married filing jointly, single or another status may apply: a person needs to decide.",
+      "rule_ids": [
+        "FS-02",
+        "FS-06",
+        "ESC-05"
+      ],
+      "resolvable": true,
+      "attempt": 1,
+      "created_at": "2026-10-29T23:50:13+00:00",
+      "resolved": true,
+      "resolution": {
+        "decision": "choose_filing_status",
+        "note": "Spouse died in 2025; joint return allowed for the year of death.",
+        "decided_by": "Grader Test",
+        "decided_at": "2026-10-29T23:50:18+00:00"
+      }
+    }
+  ],
+  "intake_escalations": [],
+  "human_decisions": [
+    {
+      "escalation_id": "eligibility_rules:spouse_died_in_tax_year:-:1",
+      "decision": "choose_filing_status",
+      "note": "Spouse died in 2025; joint return allowed for the year of death.",
+      "decided_by": "Grader Test",
+      "filing_status": "married_filing_jointly",
+      "decided_at": "2026-10-29T23:50:18+00:00"
+    }
+  ],
+  "review_history": [
+    {
+      "iteration": 1,
+      "verdict": "approved",
+      "summary": "All 12 checks passed."
+    }
+  ]
+}
