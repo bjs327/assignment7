@@ -115,6 +115,7 @@ class EligibilityFacts(BaseModel):
     # Asked on this agent's behalf (see QUESTIONS).
     spouse_died_in_2025: bool | None = None
     spouse_death_year: int | None = None
+    spouse_date_of_death: date | None = None  # asked only when it decides the spouse's age (ELIG-02)
     remarried_before_end_of_2025: bool | None = None
     can_be_claimed_as_dependent: bool | None = None
     spouse_can_be_claimed_as_dependent: bool | None = None
@@ -146,6 +147,7 @@ QUESTIONS: dict[str, str] = {
     "lived_apart_all_year": "Did you and your husband or wife live apart for all of 2025?",
     "spouse_died_in_2025": "Did your husband or wife pass away during 2025?",
     "spouse_death_year": "In what year did your husband or wife pass away?",
+    "spouse_date_of_death": "On what date did your husband or wife pass away?",
     "remarried_before_end_of_2025": "Did you remarry before the end of 2025?",
     "can_be_claimed_as_dependent": "Can anyone else claim you as a dependent on their tax return?",
     "spouse_can_be_claimed_as_dependent": (

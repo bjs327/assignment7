@@ -3,10 +3,9 @@ pydantic>=2.11,<3
 langgraph>=1.0,<2
 langgraph-checkpoint-sqlite>=3.0,<4
 
-# Agents (LangGraph) and the Document Extraction agent
-langgraph>=0.3
+# Agents (LangGraph, pinned above) and the Document Extraction agent
 langchain-core>=0.3
-langchain-anthropic>=0.3   # swap for langchain-openai if the team picks OpenAI
+langchain-anthropic>=0.3   # add langchain-openai to use EXTRACTION_PROVIDER=openai
 pillow>=10.1               # W-2 fixture images
 python-dotenv>=1.0
 

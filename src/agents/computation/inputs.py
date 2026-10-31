@@ -69,6 +69,7 @@ class Gathered:
     lived_apart: bool | None  # line 6d, married filing separately only
     taxpayer_dob: str | None
     spouse_dob: str | None
+    spouse_date_of_death: str | None  # asked only when it decides the spouse's age box
     scope_facts: dict[str, Any]
     amounts: dict[str, list[dict[str, str]]] = field(default_factory=dict)  # line -> [{label, amount}]
     extracted_ids: dict[str, list[str]] = field(default_factory=dict)  # line -> W-2 document ids
@@ -120,6 +121,7 @@ def gather(state: dict[str, Any]) -> Gathered:
         lived_apart=inputs.get("lived_apart_from_spouse_all_year"),
         taxpayer_dob=taxpayer.get("date_of_birth"),
         spouse_dob=spouse.get("date_of_birth") if spouse else None,
+        spouse_date_of_death=answers.get("spouse_date_of_death") if spouse else None,
         scope_facts={
             "claimed_as_dependent": bool(answers.get("can_be_claimed_as_dependent")),
             "spouse_itemizes": bool(answers.get("spouse_itemizes")),

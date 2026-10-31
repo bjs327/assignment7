@@ -89,7 +89,14 @@ def test_eval_case_2_hitl_is_resolved_by_a_preparer(graph, tmp_path):
     s = sessions.status(graph, "eval2")
     assert s["state"] == "finished" and s["run_status"] == "approved"
     form = build_form(s["package"])
-    assert _lines(form)["12e"] == 34700 and form["filing_status"] == "Married filing jointly"
+    assert form["filing_status"] == "Married filing jointly"
+    # The spouse (born 1960-07-19, 65 from 2025-07-18) died on 2025-03-10, before reaching 65:
+    # one age box and one senior deduction (ELIG-02, ELIG-03). Worked by hand in demo/eval_case_2.md.
+    assert s["package"]["draft_return"]["boxes_12d"]["spouse_65"] is False
+    lines = _lines(form)
+    assert {k: lines[k] for k in ("12e", "13b", "14", "15", "16", "24", "33", "34", "37")} == {
+        "12e": 33100, "13b": 6000, "14": 39100, "15": 54600, "16": 6075, "24": 6075, "33": 7850, "34": 1775,
+        "37": 0}
     assert [d["decided_by"] for d in form["human_decisions"]] == ["Preparer Pat"]
 
 

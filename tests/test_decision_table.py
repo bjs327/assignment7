@@ -201,6 +201,7 @@ def _tax_advice(state):
 
 def _spouse_died(state):
     state["eligibility_facts"]["spouse_died_in_2025"] = True
+    state["eligibility_facts"]["spouse_date_of_death"] = "2025-09-30"  # after turning 65 on 2025-07-18 (ELIG-02)
 
 
 def _exploitation(state):

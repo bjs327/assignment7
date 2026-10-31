@@ -295,7 +295,7 @@ it.
 python -m pytest
 ```
 
-About 790 tests, no API key needed: `tax_math`, every agent, the full graph through the
+About 810 tests, no API key needed: `tax_math`, every agent, the full graph through the
 Orchestrator (loop guard, bounded review loop, human review, resuming after a restart), the two
 eval cases end to end, and the dashboard driven headlessly. See
 [docs/INTEGRATION_TEST_REPORT.md](docs/INTEGRATION_TEST_REPORT.md) for the latest run.
@@ -344,6 +344,11 @@ its task ledger. The graph shows the required patterns (specification section 4.
 The Orchestrator's own notes explain the choice of topology:
 [docs/IMPLEMENTATION_NOTES.md](docs/IMPLEMENTATION_NOTES.md#orchestrator-verena).
 
+The same graph drawn from the compiled LangGraph (every node and edge it reports; regenerate with
+`python docs/make_graph.py`):
+
+![SilverFile orchestration graph](docs/graph.png)
+
 ## Repository layout
 
 ```
@@ -367,13 +372,14 @@ The Orchestrator's own notes explain the choice of topology:
 │   └── fixtures/
 ├── evals/cases.json             the two eval cases, machine-readable
 ├── tests/
-├── traces/
-├── docs/                        implementation notes, AI disclosure, metrics, integration reports
+├── traces/                      run traces of both eval cases (route, task ledger, agent events,
+│                                decisions); export_trace.py writes one for any saved session
+├── docs/                        graph.png (and make_graph.py), implementation notes, AI disclosure,
+│                                metrics, integration reports
 └── demo/                        eval cases, demo W-2 images, answer and form files
 ```
 
-Still to add: `docs/graph.png`, `docs/metrics.md` numbers (context-window strategy) and the demo
-video.
+Still to add: `docs/metrics.md` numbers (context-window strategy) and the demo video.
 
 ## More detail
 

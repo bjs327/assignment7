@@ -145,6 +145,19 @@ def test_joint_return_needs_only_one_spouse(state):
     assert not any(f.check == "R07-eligibility" for f in review(state).findings)
 
 
+@pytest.mark.parametrize("died, spouse_65", [("2025-03-10", False), ("2025-07-18", True)])
+def test_a_spouse_who_died_in_2025_is_65_only_if_65_at_death(state, died, spouse_65):
+    # Born 19 July 1960: 65 from 18 July 2025 (the day before the birthday).
+    r = state["draft_return"]
+    r["filing_status"] = "married_filing_jointly"
+    r["spouse"] = {"dob": "1960-07-19", "date_of_death": died}
+    findings = lambda: [f for f in review(state).findings if f.check == "R07-eligibility" and f.line == "12d"]
+    r["boxes_12d"]["spouse_65"] = spouse_65
+    assert not findings()
+    r["boxes_12d"]["spouse_65"] = not spouse_65
+    assert findings()
+
+
 def test_age_box_must_match_date_of_birth(state):
     state["draft_return"]["boxes_12d"]["taxpayer_65"] = False
     r = review(state)

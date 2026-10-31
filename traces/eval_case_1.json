@@ -1,0 +1,151 @@
+{
+  "session_id": "eval1",
+  "run_status": "approved",
+  "waiting_for": [],
+  "route_history": [
+    "intake",
+    "extraction",
+    "eligibility_rules",
+    "intake",
+    "extraction",
+    "eligibility_rules",
+    "computation",
+    "review",
+    "finalize"
+  ],
+  "task_ledger": {
+    "intake": {
+      "task_id": "intake",
+      "agent": "intake",
+      "status": "done",
+      "depends_on": [],
+      "attempts": 2,
+      "created_at": "2026-10-29T23:50:03+00:00",
+      "updated_at": "2026-10-29T23:50:04+00:00",
+      "note": "Interview complete."
+    },
+    "extraction": {
+      "task_id": "extraction",
+      "agent": "extraction",
+      "status": "done",
+      "depends_on": [
+        "intake"
+      ],
+      "attempts": 2,
+      "created_at": "2026-10-29T23:50:03+00:00",
+      "updated_at": "2026-10-29T23:50:04+00:00",
+      "note": "Documents read."
+    },
+    "eligibility": {
+      "task_id": "eligibility",
+      "agent": "eligibility_rules",
+      "status": "done",
+      "depends_on": [
+        "intake",
+        "extraction"
+      ],
+      "attempts": 2,
+      "created_at": "2026-10-29T23:50:03+00:00",
+      "updated_at": "2026-10-29T23:50:04+00:00",
+      "note": "Eligibility decided."
+    },
+    "computation": {
+      "task_id": "computation",
+      "agent": "computation",
+      "status": "done",
+      "depends_on": [
+        "eligibility",
+        "extraction"
+      ],
+      "attempts": 1,
+      "created_at": "2026-10-29T23:50:03+00:00",
+      "updated_at": "2026-10-29T23:50:05+00:00",
+      "note": "Draft return computed."
+    },
+    "review": {
+      "task_id": "review",
+      "agent": "review",
+      "status": "done",
+      "depends_on": [
+        "computation"
+      ],
+      "attempts": 1,
+      "created_at": "2026-10-29T23:50:03+00:00",
+      "updated_at": "2026-10-29T23:50:06+00:00",
+      "note": "Approved."
+    }
+  },
+  "trace": [
+    {
+      "agent": "document_extraction",
+      "event": "extracted",
+      "at": "2026-10-29T23:50:03+00:00",
+      "document_id": "w2-1",
+      "status": "extracted",
+      "fields": [
+        "box1",
+        "box2",
+        "box3",
+        "box4",
+        "box5",
+        "box6"
+      ],
+      "attempt": 1
+    },
+    {
+      "agent": "document_extraction",
+      "event": "aggregated",
+      "at": "2026-10-29T23:50:03+00:00",
+      "extracted": 1,
+      "needs_review": 0,
+      "failed": 0,
+      "manual_entry_required": 0
+    },
+    {
+      "agent": "eligibility_rules",
+      "event": "evaluated",
+      "at": "2026-10-29T23:50:03+00:00",
+      "attempt": 1,
+      "status": "needs_facts",
+      "missing_facts": 4,
+      "escalations": []
+    },
+    {
+      "agent": "document_extraction",
+      "event": "aggregated",
+      "at": "2026-10-29T23:50:04+00:00",
+      "extracted": 1,
+      "needs_review": 0,
+      "failed": 0,
+      "manual_entry_required": 0
+    },
+    {
+      "agent": "eligibility_rules",
+      "event": "evaluated",
+      "at": "2026-10-29T23:50:04+00:00",
+      "attempt": 2,
+      "status": "complete",
+      "missing_facts": 0,
+      "escalations": []
+    },
+    {
+      "agent": "computation",
+      "event": "complete",
+      "revision": 1,
+      "lines": 31,
+      "missing": [],
+      "answered_findings": [],
+      "at": "2026-10-29T23:50:05+00:00"
+    }
+  ],
+  "escalations": [],
+  "intake_escalations": [],
+  "human_decisions": [],
+  "review_history": [
+    {
+      "iteration": 1,
+      "verdict": "approved",
+      "summary": "All 12 checks passed."
+    }
+  ]
+}

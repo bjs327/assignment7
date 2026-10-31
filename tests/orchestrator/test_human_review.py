@@ -104,6 +104,7 @@ def test_a_recorded_filing_status_is_one_eligibility_accepts():
 def _spouse_died():
     state = session()
     state["eligibility_facts"]["spouse_died_in_2025"] = True
+    state["eligibility_facts"]["spouse_date_of_death"] = "2025-09-30"  # after turning 65 on 2025-07-18 (ELIG-02)
     return state
 
 
